@@ -152,6 +152,47 @@ def set_directory_structure():
     return dict
 
 
+def clip_lidar_to_shapefile(projected_gdf,
+                           lidar_filename, lidar_directory,
+                           dict):
+    print("Starting clip_lidar_to_shapefile()...")
+    # Convert projected subbasins data to GeoJSON-like format
+    shapes = [mapping(geom) for geom in projected_gdf.geometry]
+
+    # Mask (clip) the input DEM file
+    with rasterio.open(lidar_directory + \
+                        lidar_filename + \
+                        ".tif") as src:
+        nodata_value = src.nodata
+        out_image, out_transform = mask(src, 
+                                        shapes, 
+                                        crop=True)
+        out_meta = src.meta.copy()
+
+    # Update the copied metadata to match the clipped raster's dimensions and transform
+    out_meta.update({
+        "driver": "GTiff",
+        "height": out_image.shape[1],
+        "width": out_image.shape[2],
+        "transform": out_transform
+    })
+
+    # Clipped DEM file name with path
+    LIDAR_CLIPPED_FILE = dict["HYDROCON_INTERIM_PATH"] + \
+                         lidar_filename + \
+                            "_clip"
+
+    # Write clipped DEM data into file
+    with rasterio.open(LIDAR_CLIPPED_FILE + ".tif",
+                    "w", 
+                    **out_meta) as dest:
+        dest.write(out_image)
+                        
+    print(f"Inside clip_lidar_to_shapefile(): the clipped file has been written to {LIDAR_CLIPPED_FILE}.")
+    print("clip_lidar_to_shapefile() has ended.")
+                               
+
+
 def project_crs_subbasins_to_lidar(gdf, gdf_filename,
                                    lidar_filename, lidar_directory,
                                    dict):
@@ -181,9 +222,12 @@ def project_crs_subbasins_to_lidar(gdf, gdf_filename,
     is_correctly_projected_clrh_lidar = (input_DEM_crs == clrh_gdf_projected_lidar.crs)         
     
     # Print results
-    print("Shapefile projection is aligned with DEM projection: ", 
+    print("Inside project_crs_subbasins_to_lidar(): Shapefile projection is aligned with DEM projection: ", 
           is_correctly_projected_clrh_lidar)
+    print(f"Inside project_crs_subbasins_to_lidar(): The projected shapefile has been written to {CLRH_PROJ_LIDAR_FILE}.")
     print("project_crs_subbasins_to_lidar() has ended.")
+
+return clrh_gdf_projected_lidar
 
 
 def merge_rasters(lidar_files, dict):
