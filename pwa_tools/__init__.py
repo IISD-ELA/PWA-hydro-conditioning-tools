@@ -88,7 +88,7 @@ def set_directory_structure():
     WATERSHED_NAME = hydrocon_usr_input().string("watershed", "Manning")
 
     # Path for the parent directory of the user's current script
-    CURRENT_PATH = Path.cwd()
+    CURRENT_PATH = str(Path.cwd())
     print("CURRENT_PATH: ", CURRENT_PATH)
 
     # Path for base raw data folder
