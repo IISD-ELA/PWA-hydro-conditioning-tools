@@ -108,9 +108,9 @@ def set_directory_structure():
                 exist_ok=True) # Do nothing if already exists
 
     # Specify paths for hydro-conditioning subfolders
-    DD_RAW_PATH = DEPRESSION_DEPTHS_PATH + r"/Raw/"
-    DD_INTERIM_PATH = DEPRESSION_DEPTHS_PATH + r"/Interim/"
-    DD_PROCESSED_PATH = DEPRESSION_DEPTHS_PATH + r"/Processed/"
+    DD_RAW_PATH = HYDROCON_PATH + r"/Raw/"
+    DD_INTERIM_PATH = HYDROCON_PATH + r"/Interim/"
+    DD_PROCESSED_PATH = HYDROCON_PATH + r"/Processed/"
     
     # Create watershed subfolders in specified paths
     SUBFOLDERS_LIST = [DD_RAW_PATH,
