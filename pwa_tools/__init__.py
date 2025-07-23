@@ -145,7 +145,43 @@ def set_directory_structure():
     return dict
 
 
+def project_crs_subbasins_to_lidar(gdf, gdf_filename,
+                                   lidar_filename, lidar_directory,
+                                   dict):
+    print("Starting project_crs_subbasins_to_lidar()...")
+                                       
+    with rasterio.open(lidar_directory + \
+                       lidar_filename + \
+                       ".tif") as src:
+        input_DEM_crs = src.crs
+    
+    # Project subbasins data to match DEM
+    clrh_gdf_projected_lidar = gdf.to_crs(input_DEM_crs)
+    
+    # Remove any non-alphanumeric characters from crs name
+    input_DEM_crs_alnum = ''.join(c for c in \
+                                  str(input_DEM_crs) if c.isalnum())
+    
+    # Projected subbasins shapefile name with path
+    CLRH_PROJ_LIDAR_FILE = dict["HYDROCON_INTERIM_PATH"] + \
+                            gdf_filename + \
+                            f"_projected_{input_DEM_crs_alnum}"
+    
+    # Write projected subbasins data to shapefile
+    clrh_gdf_projected_lidar.to_file(CLRH_PROJ_LIDAR_FILE + ".shp")
+    
+    # Check if shapefile projection aligns with DEM projection
+    is_correctly_projected_clrh_lidar = (input_DEM_crs == clrh_gdf_projected_lidar.crs)         
+    
+    # Print results
+    print("Shapefile projection is aligned with DEM projection: ", 
+          is_correctly_projected_clrh_lidar)
+    print("project_crs_subbasins_to_lidar() has ended.")
+
+
 def merge_rasters(lidar_files, dict):
+    print("Starting merge_rasters()....")
+    
     # Turn string input into list
     LIDAR_FILENAMES_LIST = [f for f in lidar_files]
 
@@ -414,5 +450,7 @@ def merge_rasters(lidar_files, dict):
     # Rename lidar filename variable
     LIDAR_FILENAME_NEW = LIDAR_FILENAME_NEW + "_filled"
 
+    print("Inside merge_rasters(): The gaps have been filled.")
+    print("merge_rasters() has ended.")
     return LIDAR_FILENAME_NEW
                   
