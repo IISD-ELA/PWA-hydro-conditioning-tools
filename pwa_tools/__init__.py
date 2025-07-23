@@ -79,11 +79,14 @@ class hydrocon_usr_input:
 #=======================================FUNCTIONS========================================
 
 
-def set_directory_structure(watershed_name: str):
+def set_directory_structure():
     """
     Creates and organizes the directory structure for hydro conditioning.
     Moves files to the appropriate directories.
     """
+    # Ask user to input watershed name (default is "Manning")
+    WATERSHED_NAME = pwa.hydrocon_usr_input().string("watershed", "Manning")
+
     # Path for the parent directory of the user's current script
     CURRENT_PATH = str(Path.cwd())
     print("CURRENT_PATH: ", CURRENT_PATH)
@@ -93,7 +96,7 @@ def set_directory_structure(watershed_name: str):
     print("BS_DATA_PATH: ", BS_DATA_PATH)
     
     # Specify path for watershed folder
-    WATERSHED_PATH = BS_DATA_PATH + watershed_name
+    WATERSHED_PATH = BS_DATA_PATH + WATERSHED_NAME
     print("WATERSHED_PATH: ", WATERSHED_PATH)
 
     # Path for hydro-conditioning folder
@@ -105,20 +108,20 @@ def set_directory_structure(watershed_name: str):
                 exist_ok=True) # Do nothing if already exists
 
     # Specify paths for hydro-conditioning subfolders
-    DD_RAW_PATH = HYDROCON_PATH + r"/Raw/"
-    DD_INTERIM_PATH = HYDROCON_PATH + r"/Interim/"
-    DD_PROCESSED_PATH = HYDROCON_PATH + r"/Processed/"
+    HYDROCON_RAW_PATH = HYDROCON_PATH + r"/Raw/"
+    HYDROCON_INTERIM_PATH = HYDROCON_PATH + r"/Interim/"
+    HYDROCON_PROCESSED_PATH = HYDROCON_PATH + r"/Processed/"
     
     # Create watershed subfolders in specified paths
-    SUBFOLDERS_LIST = [DD_RAW_PATH,
-                       DD_INTERIM_PATH,
-                       DD_PROCESSED_PATH]
+    SUBFOLDERS_LIST = [HYDROCON_RAW_PATH,
+                       HYDROCON_INTERIM_PATH,
+                       HYDROCON_PROCESSED_PATH]
     for sub in SUBFOLDERS_LIST:
         os.makedirs(sub, exist_ok=True)
 
     # Specify source and destination folders before moving files
     src = Path(BS_DATA_PATH)
-    dst = Path(DD_RAW_PATH)
+    dst = Path(HYDROCON_RAW_PATH)
     
     # Move files in base data folder to watershed folder
     for file in src.iterdir():
@@ -128,3 +131,14 @@ def set_directory_structure(watershed_name: str):
                 print(f"Skipped (already exists): {file.name}")
                 continue
             shutil.move(str(file), destination_file)
+
+    # Relevant variables that the user will want in the main script
+    dict = {"WATERSHED_NAME": WATERSHED_NAME,
+            "BS_DATA_PATH": BS_DATA_PATH,
+            "WATERSHED_PATH": WATERSHED_PATH,
+            "HYDROCON_PATH": HYDROCON_PATH,
+            "HYDROCON_RAW_PATH": HYDROCON_RAW_PATH,
+            "HYDROCON_INTERIM_PATH": HYDROCON_INTERIM_PATH,
+            "HYDROCON_PROCESSED_PATH": HYDROCON_PROCESSED_PATH}
+
+    return dict
