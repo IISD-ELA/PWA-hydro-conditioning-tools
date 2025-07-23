@@ -161,7 +161,7 @@ def resample_lidar_raster(lidar_file, resolution_m):
 
     subprocess.run([
         "gdalwarp",
-        "-tr", str(resolution), str(resolution),
+        "-tr", str(resolution_m), str(resolution_m),
         "-r", "cubic",
         lidar_file + ".tif",
         LIDAR_RESAMPLED_FILE + ".tif"
