@@ -145,7 +145,7 @@ def set_directory_structure():
     return dict
 
 
-def merge_rasters(lidar_files: str, directory_dict: dict)
+def merge_rasters(lidar_files, dict)
     # Turn string input into list
     LIDAR_FILENAMES_LIST = [f for f in lidar_files]
 
