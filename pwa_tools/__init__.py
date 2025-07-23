@@ -152,18 +152,18 @@ def set_directory_structure():
     return dict
 
 
-def resample_lidar_raster(lidar_raster, resolution_m):
+def resample_lidar_raster(lidar_file, resolution_m):
     print("Starting resample_lidar_raster()...")
     
     resolution_units = "m"
-    LIDAR_RESAMPLED_FILE = lidar_raster + \
+    LIDAR_RESAMPLED_FILE = lidar_file + \
                         f"_resample_{resolution_m}{resolution_units}"
 
     subprocess.run([
         "gdalwarp",
         "-tr", str(resolution), str(resolution),
         "-r", "cubic",
-        lidar_raster + ".tif",
+        lidar_file + ".tif",
         LIDAR_RESAMPLED_FILE + ".tif"
     ])
 
