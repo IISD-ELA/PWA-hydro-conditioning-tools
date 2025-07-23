@@ -167,6 +167,9 @@ def resample_lidar_raster(lidar_raster, resolution_m):
         LIDAR_RESAMPLED_FILE + ".tif"
     ])
 
+    print(f"Inside resample_lidar_raster(): The resampled file has been written to {LIDAR_RESAMPLED_FILE}.")
+    print("resample_lidar_raster() has ended.")
+    
     return LIDAR_RESAMPLED_FILE
 
 
