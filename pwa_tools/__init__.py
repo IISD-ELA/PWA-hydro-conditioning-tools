@@ -143,3 +143,66 @@ def set_directory_structure():
             "HYDROCON_PROCESSED_PATH": HYDROCON_PROCESSED_PATH}
 
     return dict
+
+
+def merge_rasters(lidar_files: str, directory_dict: dict)
+    # Turn string input into list
+    LIDAR_FILENAMES_LIST = [f for f in lidar_files]
+
+    # Clip each raster to the subbasins shapefile for memory efficiency
+    for file in LIDAR_FILENAMES_LIST:
+        # 1. Project shapefile to match raster CRS
+
+        # Open raster file and read its CRS
+        with rasterio.open(dict["HYDROCON_RAW_PATH"] + \
+                        file + \
+                        ".tif") as src:
+            input_DEM_crs = src.crs
+        
+        # Project subbasins data to match raster CRS
+        clrh_gdf_projected = clrh_gdf.to_crs(input_DEM_crs)
+
+        # Check if shapefile projection aligns with DEM projection
+        is_correctly_projected_clrh = (input_DEM_crs == clrh_gdf_projected.crs)
+
+        
+        # 2. Clip raster to watershed boundary
+
+        # Convert projected subbasins data to GeoJSON-like format
+        shapes = [mapping(geom) for geom in clrh_gdf_projected.geometry]
+
+        # Mask (clip) the input DEM file
+        with rasterio.open(dict["HYDROCON_RAW_PATH"] + \
+                            file + \
+                            ".tif") as src:
+            nodata_value = src.nodata
+            out_image, out_transform = mask(src, 
+                                            shapes, 
+                                            crop=True)
+            out_meta = src.meta.copy()
+
+        # Update the copied metadata to match the clipped raster's dimensions and transform
+        out_meta.update({
+            "driver": "GTiff",
+            "height": out_image.shape[1],
+            "width": out_image.shape[2],
+            "transform": out_transform,
+            "compress": "lzw",              # apply LZW compression (for smaller file size)
+            "tiled": True,                  # enable tiling (for faster access)
+            "blockxsize": 256,              # set block size for tiling (for faster access)
+            "blockysize": 256,              # set block size for tiling (for faster access)
+            "nodata": nodata_value          # preserve nodata values
+        })
+
+        # Clipped DEM file name with path
+        LIDAR_CLIPPED_FILE = dict["HYDROCON_INTERIM_PATH"] + \
+                                file + \
+                                "_clip"
+
+        # Write clipped DEM data into file
+        with rasterio.open(LIDAR_CLIPPED_FILE + ".tif",
+                        "w", 
+                        **out_meta) as dest:
+            dest.write(out_image)
+
+                  
