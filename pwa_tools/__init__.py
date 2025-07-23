@@ -79,14 +79,11 @@ class hydrocon_usr_input:
 #=======================================FUNCTIONS========================================
 
 
-def set_directory_structure():
+def set_directory_structure(watershed_name: str):
     """
     Creates and organizes the directory structure for hydro conditioning.
     Moves files to the appropriate directories.
     """
-    # Ask user to input watershed name
-    WATERSHED_NAME = hydrocon_usr_input().string("watershed", "Manning")
-
     # Path for the parent directory of the user's current script
     CURRENT_PATH = str(Path.cwd())
     print("CURRENT_PATH: ", CURRENT_PATH)
@@ -96,7 +93,7 @@ def set_directory_structure():
     print("BS_DATA_PATH: ", BS_DATA_PATH)
     
     # Specify path for watershed folder
-    WATERSHED_PATH = BS_DATA_PATH + WATERSHED_NAME
+    WATERSHED_PATH = BS_DATA_PATH + watershed_name
     print("WATERSHED_PATH: ", WATERSHED_PATH)
 
     # Path for hydro-conditioning folder
