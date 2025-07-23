@@ -295,7 +295,9 @@ def merge_rasters(lidar_files: str, directory_dict: dict)
 
                 # Append the original path to the list of reprojected paths
                 reprojected_paths.append(path)
-
+                
+    print("Inside merge_rasters(): All rasters have been projected to the CRS of the highest-resolution raster.")
+    
     # 4. Merge all rasters together
 
     # Path for the merged output raster
@@ -328,6 +330,8 @@ def merge_rasters(lidar_files: str, directory_dict: dict)
     # Close the virtual raster to free up space
     vrt = None
 
+    print("Inside merge_rasters(): Input rasters have been merged. Next step is to fill in the gaps.")
+    
     # 5. Fill in gaps in merged raster
 
                   
