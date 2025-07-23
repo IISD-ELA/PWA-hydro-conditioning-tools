@@ -85,23 +85,19 @@ def set_directory_structure():
     Moves files to the appropriate directories.
     """
     # Ask user to input watershed name (default is "Manning")
-    WATERSHED_NAME = pwa.hydrocon_usr_input().string("watershed", "Manning")
+    WATERSHED_NAME = hydrocon_usr_input().string("watershed", "Manning")
 
     # Path for the parent directory of the user's current script
     CURRENT_PATH = str(Path.cwd())
-    print("CURRENT_PATH: ", CURRENT_PATH)
 
     # Path for base raw data folder
     BS_DATA_PATH = CURRENT_PATH + r"/Data/"
-    print("BS_DATA_PATH: ", BS_DATA_PATH)
     
     # Specify path for watershed folder
     WATERSHED_PATH = BS_DATA_PATH + WATERSHED_NAME
-    print("WATERSHED_PATH: ", WATERSHED_PATH)
 
     # Path for hydro-conditioning folder
     HYDROCON_PATH = WATERSHED_PATH + r"/HydroConditioning"
-    print("HYDROCON_PATH: ", HYDROCON_PATH)
     
     # Create watershed folder in specified path
     os.makedirs(HYDROCON_PATH, 
