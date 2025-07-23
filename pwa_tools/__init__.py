@@ -213,9 +213,42 @@ def clip_lidar_to_shapefile(projected_gdf,
     print("clip_lidar_to_shapefile() has ended.")
 
     return LIDAR_CLIPPED_FILE
-                               
 
-def project_crs_subbasins_to_lidar(gdf, gdf_filename,
+
+def project_subbasins_to_nhn(gdf_1, gdf_2): 
+    print("Starting project_shapefile_to_shapefile()...")
+
+    # CRS for NHN shapefile
+    input_crs = gdf.crs
+
+    # Project subbasins data to match streams data
+    gdf_projected = gdf_1.to_crs(input_crs)
+    
+    # Remove any non-alphanumeric characters from crs name
+    input_NHN_crs_alnum = ''.join(c for c in \
+                                  str(input_NHN_crs) if c.isalnum())
+
+    # Projected subbasins shapefile name with path
+    CLRH_PROJ_NHN_FILE = DD_INTERIM_PATH + \
+                            CLRH_FILENAME + \
+                            f"_projected_{input_NHN_crs_alnum}"
+
+    # Write projected subbasins data to shapefile
+    clrh_gdf_projected_nhn.to_file(CLRH_PROJ_NHN_FILE + \
+                                   ".shp")
+
+    # Check if shapefile projection aligns with DEM projection
+    is_correctly_projected_clrh_nhn = (input_NHN_crs == clrh_gdf_projected_nhn.crs)
+                              
+    
+    # Print results
+    print("Shapefile projection is aligned with NHN projection: ", 
+          is_correctly_projected_clrh_nhn)
+    print(f"Projection is: {input_NHN_crs}")
+    print("\nIf True and EPSG:4617 are returned, proceed to clipping.")
+
+
+def project_subbasins_to_lidar(gdf, gdf_filename,
                                    lidar_filename, lidar_directory,
                                    dict):
     print("Starting project_crs_subbasins_to_lidar()...")
