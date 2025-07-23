@@ -106,3 +106,28 @@ def set_directory_structure():
     # Create watershed folder in specified path
     os.makedirs(HYDROCON_PATH, 
                 exist_ok=True) # Do nothing if already exists
+
+    # Specify paths for hydro-conditioning subfolders
+    DD_RAW_PATH = DEPRESSION_DEPTHS_PATH + r"/Raw/"
+    DD_INTERIM_PATH = DEPRESSION_DEPTHS_PATH + r"/Interim/"
+    DD_PROCESSED_PATH = DEPRESSION_DEPTHS_PATH + r"/Processed/"
+    
+    # Create watershed subfolders in specified paths
+    SUBFOLDERS_LIST = [DD_RAW_PATH,
+                       DD_INTERIM_PATH,
+                       DD_PROCESSED_PATH]
+    for sub in SUBFOLDERS_LIST:
+        os.makedirs(sub, exist_ok=True)
+
+    # Specify source and destination folders before moving files
+    src = Path(BS_DATA_PATH)
+    dst = Path(DD_RAW_PATH)
+    
+    # Move files in base data folder to watershed folder
+    for file in src.iterdir():
+         if file.is_file():
+            destination_file = dst / file.name
+            if destination_file.exists():
+                print(f"Skipped (already exists): {file.name}")
+                continue
+            shutil.move(str(file), destination_file)
