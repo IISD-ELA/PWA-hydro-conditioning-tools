@@ -91,12 +91,8 @@ def set_directory_structure():
     CURRENT_PATH = Path.cwd()
     print("CURRENT_PATH: ", CURRENT_PATH)
 
-    # Path for the user's parent directory
-    PARENT_PATH = str(CURRENT_PATH.parent.as_posix())
-    print("PARENT_PATH: ", PARENT_PATH)
-
     # Path for base raw data folder
-    BS_DATA_PATH = PARENT_PATH + r"/Data/"
+    BS_DATA_PATH = CURRENT_PATH + r"/Data/"
     print("BS_DATA_PATH: ", BS_DATA_PATH)
     
     # Specify path for watershed folder
