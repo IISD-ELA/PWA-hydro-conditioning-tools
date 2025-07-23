@@ -192,7 +192,6 @@ def clip_lidar_to_shapefile(projected_gdf,
     print("clip_lidar_to_shapefile() has ended.")
                                
 
-
 def project_crs_subbasins_to_lidar(gdf, gdf_filename,
                                    lidar_filename, lidar_directory,
                                    dict):
@@ -227,7 +226,7 @@ def project_crs_subbasins_to_lidar(gdf, gdf_filename,
     print(f"Inside project_crs_subbasins_to_lidar(): The projected shapefile has been written to {CLRH_PROJ_LIDAR_FILE}.")
     print("project_crs_subbasins_to_lidar() has ended.")
 
-return clrh_gdf_projected_lidar
+    return clrh_gdf_projected_lidar
 
 
 def merge_rasters(lidar_files, dict):
