@@ -152,6 +152,24 @@ def set_directory_structure():
     return dict
 
 
+def resample_lidar_raster(lidar_raster, resolution_m):
+    print("Starting resample_lidar_raster()...")
+    
+    resolution_units = "m"
+    LIDAR_RESAMPLED_FILE = lidar_raster + \
+                        f"_resample_{resolution_m}{resolution_units}"
+
+    subprocess.run([
+        "gdalwarp",
+        "-tr", str(resolution), str(resolution),
+        "-r", "cubic",
+        lidar_raster + ".tif",
+        LIDAR_RESAMPLED_FILE + ".tif"
+    ])
+
+    return LIDAR_RESAMPLED_FILE
+
+
 def clip_lidar_to_shapefile(projected_gdf,
                            lidar_filename, lidar_directory,
                            dict):
