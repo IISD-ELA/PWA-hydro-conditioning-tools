@@ -190,6 +190,8 @@ def clip_lidar_to_shapefile(projected_gdf,
                         
     print(f"Inside clip_lidar_to_shapefile(): the clipped file has been written to {LIDAR_CLIPPED_FILE}.")
     print("clip_lidar_to_shapefile() has ended.")
+
+    return LIDAR_CLIPPED_FILE
                                
 
 def project_crs_subbasins_to_lidar(gdf, gdf_filename,
