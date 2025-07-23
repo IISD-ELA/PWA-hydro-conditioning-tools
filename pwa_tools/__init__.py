@@ -89,19 +89,24 @@ def set_directory_structure():
 
     # Path for the parent directory of the user's current script
     CURRENT_PATH = Path.cwd()
+    print("CURRENT_PATH: ", CURRENT_PATH)
 
     # Path for the user's parent directory
     PARENT_PATH = str(CURRENT_PATH.parent.as_posix())
+    print("PARENT_PATH: ", PARENT_PATH)
 
     # Path for base raw data folder
     BS_DATA_PATH = PARENT_PATH + r"/Data/"
-
+    print("BS_DATA_PATH: ", BS_DATA_PATH)
+    
     # Specify path for watershed folder
     WATERSHED_PATH = BS_DATA_PATH + WATERSHED_NAME
+    print("WATERSHED_PATH: ", WATERSHED_PATH)
 
     # Path for hydro-conditioning folder
     HYDROCON_PATH = WATERSHED_PATH + r"/HydroConditioning"
-
+    print("HYDROCON_PATH: ", HYDROCON_PATH)
+    
     # Create watershed folder in specified path
     os.makedirs(HYDROCON_PATH, 
                 exist_ok=True) # Do nothing if already exists
