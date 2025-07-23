@@ -63,6 +63,12 @@ class hydrocon_usr_input:
                 "If entering multiple raster files, separate them with commas (e.g., raster1,raster2,raster3) "
         if description == "LiDAR DEM raster":
             filename = [f.strip() for f in input(prompt).split(",")]
+            if default_value is None and filename == "":
+                while filename == "":
+                    filename = input(f"A file name is required. " + prompt).strip()
+            elif filename == "":
+                filename = default_value
+                print(f"No {description} name provided. Default applied ('{default_value}').")
         else:
             filename = input(prompt).strip()
             if "." in filename:
