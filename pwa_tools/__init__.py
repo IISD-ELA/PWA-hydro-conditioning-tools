@@ -334,4 +334,85 @@ def merge_rasters(lidar_files: str, directory_dict: dict)
     
     # 5. Fill in gaps in merged raster
 
+    # Path to the merged raster (input for filling nodata values)
+    input_raster = out_path_merged
+    # Path to the filled output raster
+    output_raster = os.path.join(dict["HYDROCON_INTERIM_PATH"], "merged_average_dem_filled.tif")
+
+
+    def fill_with_buffer(src, dst, band_index=1, nodata_val=-9999, buffer=20):
+        """
+        Fill nodata values in a raster using local nearest-neighbor interpolation with a buffer.
+
+        Parameters:
+        ------------------------------
+        - src: Source rasterio dataset
+        - dst: Destination rasterio dataset
+        - band_index: Index of the band to process (default is 1)
+        - nodata_val: Value representing nodata in the raster (default is -9999)
+        - buffer: Size of the buffer around nodata pixels to consider for interpolation (default is 20 pixels)
+        """
+
+        # Process block by block (otherwise will run out of memory for large rasters)
+        # ji is the block index (row, column) and window is the Window object
+        for ji, window in src.block_windows(band_index):
+            
+
+            # Extract starting row and column offsets and block dimensions
+            row_off, col_off = window.row_off, window.col_off
+            height, width = window.height, window.width
+
+
+            # Define a larger window around the block (otherwise will not be able to fill nodata values at the edges)
+            buffered_window = Window(
+                max(0, col_off - buffer),
+                max(0, row_off - buffer), 
+                min(width + 2 * buffer, src.width - col_off + buffer), 
+                min(height + 2 * buffer, src.height - row_off + buffer)
+            )
+
+
+            # Read buffered window
+            data = src.read(band_index, window=buffered_window)
+            mask = data == nodata_val
+
+            # Skip blocks without gaps for efficiency
+            if not np.any(mask):
+                dst.write(data[buffer:-buffer, buffer:-buffer], band_index, window=window)
+                continue
+
+
+            # Perform local nearest-neighbor interpolation (distance transform gives index of nearest non-nodata pixel)
+            inds = distance_transform_edt(mask, 
+                                        return_distances=False, 
+                                        return_indices=True)
+            
+
+            # Make a copy of the data to fill nodata values
+            filled = data.copy()
+
+
+            # Replace nodata values with nearest neighbor values
+            filled[mask] = data[tuple(inds[:, mask])]
+
+
+            # Extract central (original) window and write it (trim back to original block size to avoid overlap)
+            filled_central = filled[buffer:buffer+height, buffer:buffer+width]
+            dst.write(filled_central, band_index, window=window)
+
+    # Open the input raster and create a new output raster with the same profile
+    with rasterio.open(input_raster) as src:
+        profile = src.profile.copy()
+        nodata = src.nodata if src.nodata is not None else -9999
+        profile.update(nodata=nodata)
+
+        # Update the profile for the output raster
+        with rasterio.open(output_raster, 'w', **profile) as dst:
+            fill_with_buffer(src, dst, band_index=1, nodata_val=nodata, buffer=50)
+
+
+    # Rename lidar filename variable
+    LIDAR_FILENAME_NEW = LIDAR_FILENAME_NEW + "_filled"
+
+    return LIDAR_FILENAME_NEW
                   
