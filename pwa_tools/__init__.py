@@ -77,6 +77,11 @@ class hydrocon_usr_input:
     
 
 #=======================================FUNCTIONS========================================
+def read_shapefile(filename: str, directory: str):
+    shapefile = gpd.read_file(directory + \
+                              filename + \
+                              ".shp")
+    return shapefile
 
 
 def set_directory_structure():
