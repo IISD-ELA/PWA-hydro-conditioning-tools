@@ -149,7 +149,7 @@ def merge_rasters(lidar_files: str, directory_dict: dict)
     # Turn string input into list
     LIDAR_FILENAMES_LIST = [f for f in lidar_files]
 
-    # Clip each raster to the subbasins shapefile for memory efficiency
+    # 1. Clip each raster to the subbasins shapefile for memory efficiency
     for file in LIDAR_FILENAMES_LIST:
         # 1. Project shapefile to match raster CRS
 
@@ -204,5 +204,130 @@ def merge_rasters(lidar_files: str, directory_dict: dict)
                         "w", 
                         **out_meta) as dest:
             dest.write(out_image)
+
+    print("Inside merge_rasters(): Each raster has been clipped to subbasins shapefile.")
+
+    # 2. Find the CRS for the highest resolution raster
+    
+    # Record the paths of all clipped raster files
+    clipped_raster_paths = glob(f"{dict["HYDROCON_INTERIM_PATH"]}*_clip.tif")
+
+
+    # Function to get the resolution of a raster file
+    def get_resolution(path):
+        with rasterio.open(path) as src:
+            return min(abs(src.res[0]), abs(src.res[1]))
+        
+
+    # Record the path for the highest-resolution raster
+    highest_res_path = min(clipped_raster_paths,
+                        key=get_resolution)
+
+
+    # Record the resolution of the highest-resolution raster
+    highest_res_resolution = get_resolution(highest_res_path)
+
+
+    # Record the CRS for the highest resolution raster
+    with rasterio.open(highest_res_path) as ref_src:
+        target_crs = ref_src.crs
+
+    print("Inside merge_rasters(): The CRS for the highest resolution raster has been found.")
+
+    # 3. Project all rasters to the CRS of the highest resolution raster
+
+    # Initialize an empty list to store reprojected raster paths
+    reprojected_paths = []
+
+    # Reproject rasters to the crs of the highest-resolution raster
+    for path in clipped_raster_paths:
+
+        # Output file name
+        out_filename = os.path.splitext(os.path.basename(path))[0] + \
+                                "_reprojected.tif"
+        # Output file path
+        out_path = os.path.join(dict["HYDROCON_INTERIM_PATH"], out_filename)
+        
+        with rasterio.open(path) as src:
+            # Check if the raster's CRS is different from the target CRS
+            if src.crs != target_crs:
+                transform, width, height = calculate_default_transform(
+                    src.crs, # current raster's CRS
+                    target_crs, # target CRS (CRS of the highest-resolution raster)
+                    src.width, src.height, *src.bounds # bounds of the current raster
+                    )
+
+                # Update metadata for the output raster
+                kwargs = src.meta.copy()
+                kwargs.update({
+                    'crs': target_crs,
+                    'transform': transform,
+                    'width': width,
+                    'height': height,
+                    "compress": "lzw",              # apply LZW compression (for smaller file size)
+                    "tiled": True,                  # enable tiling (for faster access)
+                    "blockxsize": 256,              # set block size for tiling (for faster access)
+                    "blockysize": 256               # set block size for tiling (for faster access)
+                })
+
+                # Reproject and write the raster
+                with rasterio.open(out_path, 'w', **kwargs) as dst:
+                    # Loop through each band in the source raster
+                    for i in range(1, src.count + 1): 
+                        reproject(
+                            source=rasterio.band(src, i), # the input band to reproject
+                            destination=rasterio.band(dst, i), # where to write the reprojected band
+                            src_transform=src.transform, # how to interpret the source raster's coordinates
+                            src_crs=src.crs, # source raster's CRS
+                            dst_transform=transform, # how to interpret the destination raster's coordinates
+                            dst_crs=target_crs, # target CRS
+                            resampling=Resampling.bilinear, # resampling method
+                            dst_nodata=src.nodata
+                        )
+                # Append the reprojected raster path to the list
+                reprojected_paths.append(out_path)
+
+                # Print confirmation message
+                print(f"Raster {path} reprojected to {target_crs} and saved as {out_path}.")
+            else:
+                # Print message if no reprojection is needed
+                print(f"Raster {path} is already in the target CRS. No reprojection needed.")
+
+                # Append the original path to the list of reprojected paths
+                reprojected_paths.append(path)
+
+    # 4. Merge all rasters together
+
+    # Path for the merged output raster
+    LIDAR_FILENAME_NEW = "merged_average_dem"
+    out_path_merged = os.path.join(dict["HYDROCON_INTERIM_PATH"], LIDAR_FILENAME_NEW + ".tif")
+    out_path_merged_vrt = os.path.join(dict["HYDROCON_INTERIM_PATH"], "merged_virtual_raster.vrt")
+
+
+    # Create a visual raster that includes all input rasters 
+    # (virtual rasters are not written to disk, so more memory efficient!)
+    vrt = gdal.BuildVRT(out_path_merged_vrt, reprojected_paths)
+
+
+    # Now use gdal.Warp to resample and average overlapping areas
+    gdal.Warp(
+        out_path_merged,
+        vrt,
+        xRes=highest_res_resolution,
+        yRes=highest_res_resolution,
+        resampleAlg='average', # average elevation for overlapping areas
+        options=gdal.WarpOptions(
+            format='GTiff',
+            creationOptions=['COMPRESS=LZW', 
+                            'TILED=YES', 
+                            'BLOCKXSIZE=256', 
+                            'BLOCKYSIZE=256'] # to limit memory usage and improve performance
+        )
+    )
+
+    # Close the virtual raster to free up space
+    vrt = None
+
+    # 5. Fill in gaps in merged raster
 
                   
