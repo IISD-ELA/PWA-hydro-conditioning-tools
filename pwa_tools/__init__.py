@@ -223,16 +223,20 @@ def clip_nhn_to_watershed(nhn_filename,
     
     print("Starting clip_nhn_to_watershed()...")
 
+
+    # Get path to the folder where THIS file lives (i.e., pwa_tools/)
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    print("this_dir: ", this_dir)
+    
     # Save working directory so we can return to it later
     original_dir = os.getcwd()
     print("original_dir: ", original_dir)
-
 
     # Initialize whitebox tools object
     wbt = WhiteboxTools()
 
     # Set whitebox directory
-    wbt_dir = os.path.join(original_dir, "pwa_tools", "WBT")
+    wbt_dir = os.path.join(this_dir, "WBT")
     print("wbt_dir: ", wbt_dir)
     wbt.set_whitebox_dir(wbt_dir)
 
