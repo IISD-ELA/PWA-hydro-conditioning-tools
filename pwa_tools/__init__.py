@@ -225,6 +225,7 @@ def clip_nhn_to_watershed(nhn_filename,
 
     # Save working directory so we can return to it later
     original_dir = os.getcwd()
+    print("original_dir: ", original_dir)
 
 
     # Initialize whitebox tools object
@@ -232,6 +233,7 @@ def clip_nhn_to_watershed(nhn_filename,
 
     # Set whitebox directory
     wbt_dir = os.path.join(original_dir, "pwa_tools", "WBT")
+    print("wbt_dir: ", wbt_dir)
     wbt.set_whitebox_dir(wbt_dir)
 
     # Clipped NHN shapefile name with PATH
@@ -252,7 +254,7 @@ def clip_nhn_to_watershed(nhn_filename,
 
     # Return to original working directory
     os.chdir(original_dir)
-    
+
     # # Load NHN streams shapefile
     # nhn_gdf_clip = gpd.read_file(NHN_CLIPPED_FILE + \
     #                             ".shp")
