@@ -215,6 +215,56 @@ def clip_lidar_to_shapefile(projected_gdf,
     return LIDAR_CLIPPED_FILE
 
 
+def clip_nhn_to_watershed(nhn_filename, 
+                          clrh_proj_nhn_file,
+                          input_DEM_crs,
+                          input_DEM_crs_alnum,
+                          dict):
+    
+    print("Starting clip_nhn_to_watershed()...")
+
+    # Initialize whitebox tools object
+    wbt = WhiteboxTools()
+
+    # Clipped NHN shapefule name with PATH
+    NHN_CLIPPED_FILE = dict["HYDROCON_INTERIM_PATH"] + \
+                        nhn_filename + \
+                        "_clip"
+
+    # Clip NHN streams shapefile to watershed
+    wbt.clip(
+    i=dict["HYDROCON_RAW_PATH"]+nhn_filename+".shp",
+    clip=clrh_proj_nhn_file+".shp",
+    output=NHN_CLIPPED_FILE+".shp"
+    )
+
+    # Load NHN streams shapefile
+    nhn_gdf_clip = gpd.read_file(NHN_CLIPPED_FILE + \
+                                ".shp")
+
+    # Project clipped NHN shapefile to match DEM
+    nhn_gdf_clip_projected_lidar = nhn_gdf_clip.to_crs(input_DEM_crs)
+
+    # Clipped and projected NHN shapefile name with path
+    NHN_CLIPPED_PROJECTED_LIDAR_FILE = dict["HYRDOCON_INTERIM_PATH"] + \
+                                        nhn_filename + \
+                                        f"_clip_projected_{input_DEM_crs_alnum}"
+
+    # Write clipped and projected NHN shapefile
+    nhn_gdf_clip_projected_lidar.to_file(NHN_CLIPPED_PROJECTED_LIDAR_FILE + \
+                                        ".shp")
+
+    # Check if shapefile projection aligns with DEM projection
+    is_correctly_projected_nhn_lidar = (input_DEM_crs == nhn_gdf_clip_projected_lidar.crs)
+
+    # Print results
+    print("Inside clip_nhn_to_watershed(): NHN shapefile projection is aligned with DEM projection: ", 
+        is_correctly_projected_nhn_lidar)
+    print("clip_nhn_to_watershed() has ended.")
+
+    return NHN_CLIPPED_PROJECTED_LIDAR_FILE
+
+
 def project_crs_subbasins_to_nhn(nhn_gdf, 
                              subbasins_gdf,
                              subbasins_filename, 
@@ -257,7 +307,7 @@ def project_crs_subbasins_to_nhn(nhn_gdf,
 
 
     # Return projected subbasins shapefile
-    return subbasins_gdf_projected_nhn
+    return subbasins_gdf_projected_nhn, SUBBASINS_PROJ_NHN_FILE
 
 
 def project_subbasins_to_lidar(gdf, gdf_filename,
@@ -294,7 +344,7 @@ def project_subbasins_to_lidar(gdf, gdf_filename,
     print(f"Inside project_crs_subbasins_to_lidar(): The projected shapefile has been written to {CLRH_PROJ_LIDAR_FILE}.")
     print("project_crs_subbasins_to_lidar() has ended.")
 
-    return clrh_gdf_projected_lidar
+    return clrh_gdf_projected_lidar, input_DEM_crs, input_DEM_crs_alnum
 
 
 def merge_rasters(lidar_files, dict):
