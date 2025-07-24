@@ -242,33 +242,33 @@ def clip_nhn_to_watershed(nhn_filename,
 
     print("success!2")
 
-    # Load NHN streams shapefile
-    nhn_gdf_clip = gpd.read_file(NHN_CLIPPED_FILE + \
-                                ".shp")
+    # # Load NHN streams shapefile
+    # nhn_gdf_clip = gpd.read_file(NHN_CLIPPED_FILE + \
+    #                             ".shp")
 
-    print("success!3")
-    
-    # Project clipped NHN shapefile to match DEM
-    nhn_gdf_clip_projected_lidar = nhn_gdf_clip.to_crs(input_DEM_crs)
+    # print("success!3")
 
-    # Clipped and projected NHN shapefile name with path
-    NHN_CLIPPED_PROJECTED_LIDAR_FILE = dict["HYRDOCON_INTERIM_PATH"] + \
-                                        nhn_filename + \
-                                        f"_clip_projected_{input_DEM_crs_alnum}"
+    # # Project clipped NHN shapefile to match DEM
+    # nhn_gdf_clip_projected_lidar = nhn_gdf_clip.to_crs(input_DEM_crs)
 
-    # Write clipped and projected NHN shapefile
-    nhn_gdf_clip_projected_lidar.to_file(NHN_CLIPPED_PROJECTED_LIDAR_FILE + \
-                                        ".shp")
+    # # Clipped and projected NHN shapefile name with path
+    # NHN_CLIPPED_PROJECTED_LIDAR_FILE = dict["HYRDOCON_INTERIM_PATH"] + \
+    #                                     nhn_filename + \
+    #                                     f"_clip_projected_{input_DEM_crs_alnum}"
 
-    # Check if shapefile projection aligns with DEM projection
-    is_correctly_projected_nhn_lidar = (input_DEM_crs == nhn_gdf_clip_projected_lidar.crs)
+    # # Write clipped and projected NHN shapefile
+    # nhn_gdf_clip_projected_lidar.to_file(NHN_CLIPPED_PROJECTED_LIDAR_FILE + \
+    #                                     ".shp")
 
-    # Print results
-    print("Inside clip_nhn_to_watershed(): NHN shapefile projection is aligned with DEM projection: ", 
-        is_correctly_projected_nhn_lidar)
-    print("clip_nhn_to_watershed() has ended.")
+    # # Check if shapefile projection aligns with DEM projection
+    # is_correctly_projected_nhn_lidar = (input_DEM_crs == nhn_gdf_clip_projected_lidar.crs)
 
-    return NHN_CLIPPED_PROJECTED_LIDAR_FILE
+    # # Print results
+    # print("Inside clip_nhn_to_watershed(): NHN shapefile projection is aligned with DEM projection: ", 
+    #     is_correctly_projected_nhn_lidar)
+    # print("clip_nhn_to_watershed() has ended.")
+
+    # return NHN_CLIPPED_PROJECTED_LIDAR_FILE
 
 
 def project_crs_subbasins_to_nhn(nhn_gdf, 
