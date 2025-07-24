@@ -261,7 +261,7 @@ def clip_nhn_to_watershed(nhn_filename,
     nhn_gdf_clip_projected_lidar = nhn_gdf_clip.to_crs(input_DEM_crs)
 
     # Clipped and projected NHN shapefile name with path
-    NHN_CLIPPED_PROJECTED_LIDAR_FILE = dict["HYRDOCON_INTERIM_PATH"] + \
+    NHN_CLIPPED_PROJECTED_LIDAR_FILE = dict["HYDROCON_INTERIM_PATH"] + \
                                         nhn_filename + \
                                         f"_clip_projected_{input_DEM_crs_alnum}"
 
