@@ -34,7 +34,7 @@ import rasterio.plot
 
 
 # # Whitebox
-# from WBT.whitebox_tools import WhiteboxTools
+from pwa_tools.WBT.whitebox_tools import WhiteboxTools
 
 
 #======================================CLASSES========================================
@@ -215,7 +215,7 @@ def clip_lidar_to_shapefile(projected_gdf,
     return LIDAR_CLIPPED_FILE
 
 
-def project_subbasins_to_nhn(nhn_gdf, 
+def project_crs_subbasins_to_nhn(nhn_gdf, 
                              subbasins_gdf,
                              subbasins_filename, 
                              dict):
