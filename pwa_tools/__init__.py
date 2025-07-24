@@ -276,8 +276,65 @@ def clip_nhn_to_watershed(nhn_filename,
     print("Inside clip_nhn_to_watershed(): NHN shapefile projection is aligned with DEM projection: ", 
         is_correctly_projected_nhn_lidar)
     print("clip_nhn_to_watershed() has ended.")
+    print("clip_nhn_to_watershed has ended.")
 
     return NHN_CLIPPED_PROJECTED_LIDAR_FILE
+
+
+def gen_depressions_raster(lidar_clipped_resampled_file,
+                           nhn_clipped_projected_lidar_file,
+                           resolution_m,
+                           dict):
+    print("Starting gen_depressions_raster()...")
+
+    # Get path to the folder where THIS file lives (required to access WhiteboxTools)
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Save working directory so we can return to it later
+    original_dir = os.getcwd()
+
+    # Initialize whitebox tools object
+    wbt = WhiteboxTools()
+
+    # Set whitebox directory
+    wbt_dir = os.path.join(this_dir, "WBT")
+    wbt.set_whitebox_dir(wbt_dir)
+
+    # Burn streams into DEM and fill
+    wbt.fill_burn(
+        dem=lidar_clipped_resampled_file+".tif",
+        streams=nhn_clipped_projected_lidar_file+".shp",
+        output=lidar_clipped_resampled_file+"_FillBurn"+".tif"
+    )
+
+
+    # Subtract raw DEM from filled DEM
+    first_statement_operand = lidar_clipped_resampled_file+"_FillBurn"+".tif"
+    second_statement_operand = lidar_clipped_resampled_file+".tif"
+    wbt.raster_calculator(
+        output = lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif",
+        statement = f"'{first_statement_operand}' - '{second_statement_operand}'"  
+    )
+
+
+    # Depressions raster file with path
+    DEPRESSIONS_RASTER_FILE = dict["HYDROCON_PROCESSED_PATH+LIDAR_FILENAME"]+\
+                            f"_clip_resample_{resolution_m}m_FillBurn_Deps_Corr"
+
+
+    # Remove stray burn lines
+    wbt.conditional_evaluation(
+        i=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif",
+        output=lidar_clipped_resampled_file+".tif",
+        statement="value < 0.0",
+        true=0.0,
+        false=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif"
+    )
+
+    print("Inside gen_depressions_raster(): The depressions raster has been generated and saved to: ",
+          DEPRESSIONS_RASTER_FILE + ".tif")
+    
+    return DEPRESSIONS_RASTER_FILE
 
 
 def project_crs_subbasins_to_nhn(nhn_gdf, 
