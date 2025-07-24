@@ -332,10 +332,103 @@ def gen_depressions_raster(lidar_filename,
         false=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif"
     )
 
+    # Return to original working directory
+    os.chdir(original_dir)
+
     print("Inside gen_depressions_raster(): The depressions raster has been generated and saved to: ",
           DEPRESSIONS_RASTER_FILE + ".tif")
     
     return DEPRESSIONS_RASTER_FILE
+
+
+def calc_depression_depths(clrh_proj_lidar_file,
+                           watershed_name,
+                           depressions_raster_file,
+                           clrh_gdf_projected_lidar,
+                           dict):
+    print("Starting calc_depression_depths()...")
+
+    # CLRH subbasins raster file name with path 
+    CLRH_RASTER_FILE = clrh_proj_lidar_file + "_raster"
+
+    # Get path to the folder where THIS file lives (required to access WhiteboxTools)
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Save working directory so we can return to it later
+    original_dir = os.getcwd()
+
+    # Initialize whitebox tools object
+    wbt = WhiteboxTools()
+
+    # Set whitebox directory
+    wbt_dir = os.path.join(this_dir, "WBT")
+    wbt.set_whitebox_dir(wbt_dir)
+
+    # # Convert clrh subbasin polygons to raster
+    wbt.vector_polygons_to_raster(
+        i=clrh_proj_lidar_file+".shp",
+        output=CLRH_RASTER_FILE+".tif",
+        field = "FID",
+        nodata = True,
+        cell_size = 5.0
+    )
+
+    # Open clrh subbasins raster file
+    with rasterio.open(CLRH_RASTER_FILE+".tif") as src:
+        target_crs = 26914
+        profile = src.profile
+        profile.update(crs=CRS.from_epsg(target_crs))
+    
+    # Zonal stats file name with path
+    ZONAL_STATS_FILE = Path(dict["HYDROCON_PROCESSED_PATH"], 
+                    f"ZonalStats_{watershed_name}.html").resolve()
+
+
+    # Make sure that the hydrofabric raster is aligned with the depression raster
+    subprocess.run([
+        "gdalwarp",
+        "-r", "near",               
+        "-overwrite",    
+        "-tr", "5", "5",            
+        "-te",                     
+        str(rasterio.open(depressions_raster_file + ".tif").bounds.left),
+        str(rasterio.open(depressions_raster_file + ".tif").bounds.bottom),
+        str(rasterio.open(depressions_raster_file + ".tif").bounds.right),
+        str(rasterio.open(depressions_raster_file + ".tif").bounds.top),
+        CLRH_RASTER_FILE + ".tif",
+        CLRH_RASTER_FILE + "_aligned" + ".tif"
+    ])
+
+
+    # Calculate zonal statistics for depression raster
+    wbt.zonal_statistics(
+        i=depressions_raster_file + ".tif",
+        features=CLRH_RASTER_FILE + "_aligned" + ".tif",
+        stat="total",
+        out_table=ZONAL_STATS_FILE
+    )
+
+    # Read zonal stats html as pandas df
+    zonal_stats_df = pd.read_html(ZONAL_STATS_FILE,
+                                flavor='bs4')[0]
+
+    # Calculate depression depths (mm) and add field to gdf
+    clrh_gdf_projected_lidar['Deps_Depth_mm'] = zonal_stats_df['Mean'] * 1000
+
+    # Calculate depression volumes (m3) and add field to gdf
+    clrh_gdf_projected_lidar['Deps_Vol_m3'] = clrh_gdf_projected_lidar['Deps_Depth_mm']*clrh_gdf_projected_lidar['BasArea']
+    
+    # Depression depths file name with path
+    DEPRESSION_DEPTHS_FILE = dict["HYDROCON_PROCESSED_PATH"] + \
+                            "CLRH_basins_depression_depths"
+
+    # Write geodataframe to file for use in raven input file creation
+    clrh_gdf_projected_lidar.to_file(DEPRESSION_DEPTHS_FILE + ".shp")
+
+    # Return to original working directory
+    os.chdir(original_dir)
+
+    return DEPRESSION_DEPTHS_FILE
 
 
 def project_crs_subbasins_to_nhn(nhn_gdf, 
@@ -417,7 +510,7 @@ def project_subbasins_to_lidar(gdf, gdf_filename,
     print(f"Inside project_crs_subbasins_to_lidar(): The projected shapefile has been written to {CLRH_PROJ_LIDAR_FILE}.")
     print("project_crs_subbasins_to_lidar() has ended.")
 
-    return clrh_gdf_projected_lidar, input_DEM_crs, input_DEM_crs_alnum
+    return clrh_gdf_projected_lidar, input_DEM_crs, input_DEM_crs_alnum, CLRH_PROJ_LIDAR_FILE
 
 
 def merge_rasters(lidar_files, dict):
