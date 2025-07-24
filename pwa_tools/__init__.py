@@ -34,7 +34,7 @@ import rasterio.plot
 
 
 # # Whitebox
-from WBT.whitebox_tools import WhiteboxTools
+from .WBT.whitebox_tools import WhiteboxTools  
 
 
 #======================================CLASSES========================================
