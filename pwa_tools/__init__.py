@@ -326,7 +326,7 @@ def gen_depressions_raster(lidar_filename,
     # Remove stray burn lines
     wbt.conditional_evaluation(
         i=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif",
-        output=lidar_clipped_resampled_file+".tif",
+        output=DEPRESSIONS_RASTER_FILE+".tif",
         statement="value < 0.0",
         true=0.0,
         false=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif"
