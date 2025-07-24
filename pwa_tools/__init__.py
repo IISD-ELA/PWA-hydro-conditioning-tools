@@ -224,28 +224,23 @@ def clip_nhn_to_watershed(nhn_filename,
     print("Starting clip_nhn_to_watershed()...")
 
 
-    # Get path to the folder where THIS file lives (i.e., pwa_tools/)
+    # Get path to the folder where THIS file lives (required to access WhiteboxTools)
     this_dir = os.path.dirname(os.path.abspath(__file__))
-    print("this_dir: ", this_dir)
-    
+
     # Save working directory so we can return to it later
     original_dir = os.getcwd()
-    print("original_dir: ", original_dir)
 
     # Initialize whitebox tools object
     wbt = WhiteboxTools()
 
     # Set whitebox directory
     wbt_dir = os.path.join(this_dir, "WBT")
-    print("wbt_dir: ", wbt_dir)
     wbt.set_whitebox_dir(wbt_dir)
 
     # Clipped NHN shapefile name with PATH
     NHN_CLIPPED_FILE = dict["HYDROCON_INTERIM_PATH"] + \
                         nhn_filename + \
                         "_clip"
-
-    print("success!1")
 
     # Clip NHN streams shapefile to watershed
     wbt.clip(
@@ -254,38 +249,35 @@ def clip_nhn_to_watershed(nhn_filename,
     output=NHN_CLIPPED_FILE+".shp"
     )
 
-    print("success!2")
-
     # Return to original working directory
     os.chdir(original_dir)
 
-    # # Load NHN streams shapefile
-    # nhn_gdf_clip = gpd.read_file(NHN_CLIPPED_FILE + \
-    #                             ".shp")
+    # Load NHN streams shapefile
+    nhn_gdf_clip = gpd.read_file(NHN_CLIPPED_FILE + \
+                                ".shp")
 
-    # print("success!3")
 
-    # # Project clipped NHN shapefile to match DEM
-    # nhn_gdf_clip_projected_lidar = nhn_gdf_clip.to_crs(input_DEM_crs)
+    # Project clipped NHN shapefile to match DEM
+    nhn_gdf_clip_projected_lidar = nhn_gdf_clip.to_crs(input_DEM_crs)
 
-    # # Clipped and projected NHN shapefile name with path
-    # NHN_CLIPPED_PROJECTED_LIDAR_FILE = dict["HYRDOCON_INTERIM_PATH"] + \
-    #                                     nhn_filename + \
-    #                                     f"_clip_projected_{input_DEM_crs_alnum}"
+    # Clipped and projected NHN shapefile name with path
+    NHN_CLIPPED_PROJECTED_LIDAR_FILE = dict["HYRDOCON_INTERIM_PATH"] + \
+                                        nhn_filename + \
+                                        f"_clip_projected_{input_DEM_crs_alnum}"
 
-    # # Write clipped and projected NHN shapefile
-    # nhn_gdf_clip_projected_lidar.to_file(NHN_CLIPPED_PROJECTED_LIDAR_FILE + \
-    #                                     ".shp")
+    # Write clipped and projected NHN shapefile
+    nhn_gdf_clip_projected_lidar.to_file(NHN_CLIPPED_PROJECTED_LIDAR_FILE + \
+                                        ".shp")
 
-    # # Check if shapefile projection aligns with DEM projection
-    # is_correctly_projected_nhn_lidar = (input_DEM_crs == nhn_gdf_clip_projected_lidar.crs)
+    # Check if shapefile projection aligns with DEM projection
+    is_correctly_projected_nhn_lidar = (input_DEM_crs == nhn_gdf_clip_projected_lidar.crs)
 
-    # # Print results
-    # print("Inside clip_nhn_to_watershed(): NHN shapefile projection is aligned with DEM projection: ", 
-    #     is_correctly_projected_nhn_lidar)
-    # print("clip_nhn_to_watershed() has ended.")
+    # Print results
+    print("Inside clip_nhn_to_watershed(): NHN shapefile projection is aligned with DEM projection: ", 
+        is_correctly_projected_nhn_lidar)
+    print("clip_nhn_to_watershed() has ended.")
 
-    # return NHN_CLIPPED_PROJECTED_LIDAR_FILE
+    return NHN_CLIPPED_PROJECTED_LIDAR_FILE
 
 
 def project_crs_subbasins_to_nhn(nhn_gdf, 
