@@ -281,10 +281,11 @@ def clip_nhn_to_watershed(nhn_filename,
     return NHN_CLIPPED_PROJECTED_LIDAR_FILE
 
 
-def gen_depressions_raster(lidar_clipped_resampled_file,
-                           nhn_clipped_projected_lidar_file,
-                           resolution_m,
-                           dict):
+def gen_depressions_raster(lidar_filename,
+                            lidar_clipped_resampled_file,
+                            nhn_clipped_projected_lidar_file,
+                            resolution_m,
+                            dict):
     print("Starting gen_depressions_raster()...")
 
     # Get path to the folder where THIS file lives (required to access WhiteboxTools)
@@ -318,7 +319,7 @@ def gen_depressions_raster(lidar_clipped_resampled_file,
 
 
     # Depressions raster file with path
-    DEPRESSIONS_RASTER_FILE = dict["HYDROCON_PROCESSED_PATH+LIDAR_FILENAME"]+\
+    DEPRESSIONS_RASTER_FILE = dict["HYDROCON_PROCESSED_PATH"]+lidar_filename+\
                             f"_clip_resample_{resolution_m}m_FillBurn_Deps_Corr"
 
 
