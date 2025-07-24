@@ -226,10 +226,12 @@ def clip_nhn_to_watershed(nhn_filename,
     # Initialize whitebox tools object
     wbt = WhiteboxTools()
 
-    # Clipped NHN shapefule name with PATH
+    # Clipped NHN shapefile name with PATH
     NHN_CLIPPED_FILE = dict["HYDROCON_INTERIM_PATH"] + \
                         nhn_filename + \
                         "_clip"
+
+    print("success!1")
 
     # Clip NHN streams shapefile to watershed
     wbt.clip(
@@ -238,10 +240,14 @@ def clip_nhn_to_watershed(nhn_filename,
     output=NHN_CLIPPED_FILE+".shp"
     )
 
+    print("success!2")
+
     # Load NHN streams shapefile
     nhn_gdf_clip = gpd.read_file(NHN_CLIPPED_FILE + \
                                 ".shp")
 
+    print("success!3")
+    
     # Project clipped NHN shapefile to match DEM
     nhn_gdf_clip_projected_lidar = nhn_gdf_clip.to_crs(input_DEM_crs)
 
