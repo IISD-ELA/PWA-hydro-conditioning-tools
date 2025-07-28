@@ -1,4 +1,4 @@
-# System
+# Sytem
 import os
 import sys
 import fileinput
@@ -15,8 +15,9 @@ import geopandas as gpd
 import pandas as pd
 from shapely.geometry import Point, LineString, Polygon, MultiPoint, mapping
 from shapely.geometry import shape as shapely_shape
-from scipy.ndimage import distance_transform_edt
+from scipy.ndimage import distance_transform_edt, label
 import rasterio
+import rasterio.features
 from rasterio.crs import CRS
 from rasterio.mask import mask
 from bs4 import BeautifulSoup
@@ -24,6 +25,8 @@ from rasterio.warp import calculate_default_transform, reproject, Resampling
 from rasterio.merge import merge
 from rasterio.enums import Resampling
 from rasterio.windows import Window
+import collections
+from collections import defaultdict
 # do not use pip to install gdal, use conda instead (conda install -c conda-forge gdal)
 from osgeo import gdal
 
@@ -33,7 +36,7 @@ import matplotlib.pyplot as plt
 import rasterio.plot
 
 
-# # Whitebox
+# Whitebox
 from .WBT.whitebox_tools import WhiteboxTools  
 
 
@@ -429,6 +432,105 @@ def calc_depression_depths(clrh_proj_lidar_file,
     os.chdir(original_dir)
 
     return DEPRESSION_DEPTHS_FILE
+
+
+def gen_wetland_polygons(depressions_raster_file,
+                         dict):
+    print("Starting gen_wetland_polygons()...")
+
+    # Load the depression depths raster
+    with rasterio.open(depressions_raster_file + ".tif") as src:
+        depression_data = src.read(1)  # Read first layer (only has one layer)
+        transform = src.transform
+        pixel_area = abs(transform[0] * transform[4])
+        nodata = src.nodata
+
+    # Mask nodata and select depressions
+    depth_threshold = 0.05  # ignore anything below 5 cm (for efficiency later)
+    valid_mask = (depression_data > depth_threshold) & (depression_data != nodata)
+
+    # Label all connected depressions > 0 (wetlands)
+    structure = np.ones((3, 3), dtype=int)
+    labeled_array, num_features = label(valid_mask, structure=structure)
+
+    # Flatten arrays
+    flat_labels = labeled_array.ravel()
+    flat_depths = depression_data.ravel()
+
+    # Get pixel counts per label (per wetland)
+    counts = np.bincount(flat_labels)
+    areas_m2 = counts * pixel_area
+
+    # Total storage volume per label (per wetland)
+    volume_sums = np.bincount(flat_labels, weights=flat_depths)
+    volumes_m3 = volume_sums * pixel_area
+
+    # Preallocate median array (this is so that we can avoid for loops)
+    medians = np.full(num_features + 1, np.nan)
+
+    depths_by_label = defaultdict(list)
+    for label_val, depth in zip(flat_labels, flat_depths):
+        if label_val == 0:
+            continue
+        depths_by_label[label_val].append(depth)
+
+    for label_val, depth_list in depths_by_label.items():
+        medians[label_val] = np.median(depth_list)
+
+
+    # Build dataframe
+    wetlands_df_stats = pd.DataFrame({
+        'wetland_id': np.arange(len(areas_m2)),
+        'area_m2': areas_m2,
+        'volume_m3': volumes_m3,
+        'median_depth_m': medians
+    })
+
+
+    # Filter out background (label 0), small areas, and small volumes
+    area_threshold = 100  # m2
+    volume_threshold = 30  # m3
+    wetlands_df_stats = wetlands_df_stats.query(f"wetland_id != 0 and area_m2 >= {area_threshold} and volume_m3 >= {volume_threshold}")
+
+
+    # Write stats to CSV
+    WETLANDS_STATS_CSV = dict["HYDROCON_PROCESSED_PATH"] + "Wetlands_Stats.csv"
+    wetlands_df_stats.to_csv(WETLANDS_STATS_CSV, index=False) 
+
+    # Create mask of valid wetland IDs (from filtered df_stats)
+    valid_ids = set(wetlands_df_stats["wetland_id"])
+    valid_mask = np.isin(labeled_array, list(valid_ids))
+
+    # Extract shapes (polygons) from the labeled array
+    polygons = []
+    labels = []
+
+    with rasterio.open(depressions_raster_file + ".tif") as src:  # or any raster for transform/CRS
+        transform = src.transform
+        crs = src.crs
+
+        for geom, val in rasterio.features.shapes(
+            labeled_array.astype(np.int32),
+            mask=valid_mask,
+            transform=transform
+        ):
+            if val in valid_ids:
+                polygons.append(shapely_shape(geom))
+                labels.append(val)
+    
+    # Make GeoDataFrame
+    gdf = gpd.GeoDataFrame({'wetland_id': labels, 'geometry': polygons}, crs=crs)
+
+    # Join with statistics table
+    gdf = gdf.merge(wetlands_df_stats, on='wetland_id')
+
+    # Write results to shapefile
+    WETLANDS_POLYGONS_SHAPEFILE = dict["HYDROCON_PROCESSED_PATH"] + "Wetlands_Polygons_with_Stats.shp"
+    gdf.to_file(WETLANDS_POLYGONS_SHAPEFILE)
+
+    print("Inside gen_wetland_polygons(): Wetland polygons have been generated and saved to: ", WETLANDS_POLYGONS_SHAPEFILE)
+
+    return WETLANDS_POLYGONS_SHAPEFILE, gdf
 
 
 def project_crs_subbasins_to_nhn(nhn_gdf, 
