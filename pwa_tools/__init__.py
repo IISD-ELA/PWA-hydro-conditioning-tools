@@ -513,7 +513,7 @@ def project_subbasins_to_lidar(gdf, gdf_filename,
     return clrh_gdf_projected_lidar, input_DEM_crs, input_DEM_crs_alnum, CLRH_PROJ_LIDAR_FILE
 
 
-def merge_rasters(lidar_files, dict):
+def merge_rasters(lidar_files, gdf, dict):
     print("Starting merge_rasters()....")
     
     # Turn string input into list
@@ -530,12 +530,11 @@ def merge_rasters(lidar_files, dict):
             input_DEM_crs = src.crs
         
         # Project subbasins data to match raster CRS
-        clrh_gdf_projected = clrh_gdf.to_crs(input_DEM_crs)
+        clrh_gdf_projected = gdf.to_crs(input_DEM_crs)
 
         # Check if shapefile projection aligns with DEM projection
-        is_correctly_projected_clrh = (input_DEM_crs == clrh_gdf_projected.crs)
+        # is_correctly_projected_clrh = (input_DEM_crs == clrh_gdf_projected.crs)
 
-        
         # 2. Clip raster to watershed boundary
 
         # Convert projected subbasins data to GeoJSON-like format
