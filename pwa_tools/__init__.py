@@ -426,7 +426,7 @@ def calc_depression_depths(clrh_proj_lidar_file,
                             "CLRH_basins_depression_depths"
 
     # Write geodataframe to file for use in raven input file creation
-    clrh_gdf_projected_lidar.to_file(DEPRESSION_DEPTHS_FILE + ".shp")
+    clrh_gdf_projected_lidar.to_file(DEPRESSION_DEPTHS_FILE + ".shp", engine="fiona")
 
     # Return to original working directory
     os.chdir(original_dir)
@@ -526,7 +526,7 @@ def gen_wetland_polygons(depressions_raster_file,
 
     # Write results to shapefile
     WETLANDS_POLYGONS_SHAPEFILE = dict["HYDROCON_PROCESSED_PATH"] + "Wetlands_Polygons_with_Stats.shp"
-    gdf.to_file(WETLANDS_POLYGONS_SHAPEFILE)
+    gdf.to_file(WETLANDS_POLYGONS_SHAPEFILE, engine="fiona")
 
     print("Inside gen_wetland_polygons(): Wetland polygons have been generated and saved to: ", WETLANDS_POLYGONS_SHAPEFILE)
 
@@ -560,7 +560,7 @@ def project_crs_subbasins_to_nhn(nhn_gdf,
 
     # Write projected subbasins data to shapefile
     subbasins_gdf_projected_nhn.to_file(SUBBASINS_PROJ_NHN_FILE + \
-                                ".shp")
+                                ".shp", engine="fiona")
 
 
     # Check if shapefile projection aligns with DEM projection
@@ -601,7 +601,7 @@ def project_subbasins_to_lidar(gdf, gdf_filename,
                             f"_projected_{input_DEM_crs_alnum}"
     
     # Write projected subbasins data to shapefile
-    clrh_gdf_projected_lidar.to_file(CLRH_PROJ_LIDAR_FILE + ".shp")
+    clrh_gdf_projected_lidar.to_file(CLRH_PROJ_LIDAR_FILE + ".shp", engine="fiona")
     
     # Check if shapefile projection aligns with DEM projection
     is_correctly_projected_clrh_lidar = (input_DEM_crs == clrh_gdf_projected_lidar.crs)         
