@@ -30,7 +30,6 @@ from collections import defaultdict
 # do not use pip to install gdal, use conda instead (conda install -c conda-forge gdal)
 from osgeo import gdal
 
-print("This is a test snippet for version control -IY 2025-09-17")
 
 # Visualization
 import matplotlib.pyplot as plt
