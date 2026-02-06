@@ -6,4 +6,3 @@ scipy
 rasterio
 beautifulsoup4
 matplotlib
-fiona
