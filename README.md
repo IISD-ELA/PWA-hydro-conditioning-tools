@@ -1,6 +1,14 @@
 # PWA-hydro-conditioning-tools
 Python module for hydro conditioning Prairie watersheds.
 
+### Versioning Note
+Versions follow the Semver convention:
+- Patch x.x.Y. - bug fix, no interface change (Not currently tracked)
+- Minor x.Y.x. - new feature added, fully backward compatible
+- Major Y.x.x. - breaking change to the public interface
+
+Process note: Major or minor commits to this repo should be tested for compatibility with PWA dependencies
+
 ### Repository Structure
 ```bash
 PWA-hydro-conditioning-tools/
