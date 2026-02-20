@@ -99,66 +99,35 @@ class hydrocon_usr_input:
 
 #---------------------------------PROJECT SETUP CLASS AND FUNCTIONS--------------------------------
 class project_state:
-    
+    def __init__(self):
+        self.WATERSHED_NAME = None
+        self.BS_DATA_PATH = None
+        self.WATERSHED_PATH = None
+        self.HYDROCON_PATH = None
+        self.HYDROCON_RAW_PATH = None
+        self.HYDROCON_INTERIM_PATH = None
+        self.HYDROCON_PROCESSED_PATH = None
+        self.CLRH_FILENAME = None
+        self.LIDAR_FILENAME = None
+        self.NHN_FILENAME = None
+        self.MULTIPLE_LIDAR_RASTERS = None
+        self.RECOVERY_PATH = None
+        self.LAST_FUNCTION_RUN = None
 
-def project_setup(watershed_default = "watershed_name", delineation_default = "finalcat_info_v1-0", lidar_default = "sr_dem_cgvd28", channels_default = "NHN_05OE000_5_0_HD_SLWATER_1", data_dir = None, recovery_mode = False):
-    # Organize data folders and files and store relevant directory information in a dictionary
-    # (user will be prompted to enter the watershed name to name the working directory after)
-    DIRECTORY_DICT = set_directory_structure(default_watershed = watershed_default, data_dir = data_dir, recovery_mode = recovery_mode)
+# Global Project State Instance
+state = project_state()
 
-
-    # Name of watershed shapefile from CLRH hydrofabrics zip file (.shp)
-    CLRH_FILENAME = hydrocon_usr_input().file("hydrofabric shapefile", 
-                                                delineation_default) # This is the default for Manning Canal
-
-
-    # Name of LiDAR DEM raster from LiDAR DEM zip file (.tif)
-    # This can be multiple files, separated by commas (e.g., Boyne river requires multiple rasters))
-    # Multiple rasters will be merged into one in latter steps
-    LIDAR_FILENAME = hydrocon_usr_input().file("LiDAR DEM raster", 
-                                                lidar_default) # This is the default for Manning Canal
-
-
-    # Name of streams shapefile from NHN streams zip file (.shp)
-    NHN_FILENAME = hydrocon_usr_input().file("NHN streams shapefile", 
-                                                channels_default) # This is the default for Manning Canal
-
-
-    # Boolean object to indicate if there are multiple LiDAR DEM rasters
-    MULTIPLE_LIDAR_RASTERS = True if (isinstance(LIDAR_FILENAME, list) and len(LIDAR_FILENAME)) > 1 else False
-
-    # Add relevant variables to the dictionary
-    DIRECTORY_DICT["CLRH_FILENAME"] = CLRH_FILENAME
-    DIRECTORY_DICT["LIDAR_FILENAME"] = LIDAR_FILENAME
-    DIRECTORY_DICT["NHN_FILENAME"] = NHN_FILENAME
-    DIRECTORY_DICT["MULTIPLE_LIDAR_RASTERS"] = MULTIPLE_LIDAR_RASTERS
-
-    # Store DIRECTORY_DICT as pickle file for use in main script
-    try:
-        pickle_file_path = Path(DIRECTORY_DICT["RECOVERY_PATH"]) / "directory_dict.pkl"
+def save_state():
+    # Store state as pickle file for use in main script
+    if state.RECOVERY_PATH is not None:
+        pickle_file_path = Path(state.RECOVERY_PATH) / "state.pkl"
         with open(pickle_file_path, 'wb') as f:
-            pickle.dump(DIRECTORY_DICT, f)
-        print(f"DIRECTORY_DICT saved to: {DIRECTORY_DICT['RECOVERY_PATH']}")
-
-    except KeyError:
+            pickle.dump(state, f)
+        print(f"State saved to: {state.RECOVERY_PATH}")
+    else:
         print("Recovery mode not enabled. Directory information not saved to pickle file.")
 
-    print(f"Project setup complete. Data organized in directory: {DIRECTORY_DICT['WATERSHED_PATH']}")
-
-    
-    # Promote the dictionary and its contents to global scope so that it can be accessed in the main script
-    globals()["DIRECTORY_DICT"] = DIRECTORY_DICT
-    for key, value in DIRECTORY_DICT.items():
-        globals()[key] = value
-
-
-#=======================================FUNCTIONS========================================
-def read_shapefile(filename: str, directory: str):
-    shapefile = gpd.read_file(directory + \
-                              filename + \
-                              ".shp")
-    return shapefile
-
+    print(f"Project setup complete. Data organized in directory: {state.WATERSHED_PATH}")
 
 def set_directory_structure(default_watershed = "watershed_name", data_dir = None, recovery_mode = False):
     """
@@ -173,42 +142,42 @@ def set_directory_structure(default_watershed = "watershed_name", data_dir = Non
     """
     
     # Ask user to input watershed name (default is "Manning")
-    WATERSHED_NAME = hydrocon_usr_input().string("Provide the name of your watershed", default_watershed)
+    state.WATERSHED_NAME = hydrocon_usr_input().string("Provide the name of your watershed", default_watershed)
 
     # Path for the parent directory of the user's current script
     CURRENT_PATH = str(Path.cwd())
 
     # Path for base raw data folder
     if data_dir is not None:
-        BS_DATA_PATH = CURRENT_PATH + data_dir
+        state.BS_DATA_PATH = CURRENT_PATH + data_dir
     else:
-        BS_DATA_PATH = CURRENT_PATH + r"/Data/"
+        state.BS_DATA_PATH = CURRENT_PATH + r"/Data/"
     
     # Specify path for watershed folder
-    WATERSHED_PATH = BS_DATA_PATH + WATERSHED_NAME
+    state.WATERSHED_PATH = state.BS_DATA_PATH + state.WATERSHED_NAME
 
     # Path for hydro-conditioning folder
-    HYDROCON_PATH = WATERSHED_PATH + r"/HydroConditioning"
+    state.HYDROCON_PATH = state.WATERSHED_PATH + r"/HydroConditioning"
     
     # Create watershed folder in specified path
-    os.makedirs(HYDROCON_PATH, 
+    os.makedirs(state.HYDROCON_PATH, 
                 exist_ok=True) # Do nothing if already exists
 
     # Specify paths for hydro-conditioning subfolders
-    HYDROCON_RAW_PATH = HYDROCON_PATH + r"/Raw/"
-    HYDROCON_INTERIM_PATH = HYDROCON_PATH + r"/Interim/"
-    HYDROCON_PROCESSED_PATH = HYDROCON_PATH + r"/Processed/"
+    state.HYDROCON_RAW_PATH = state.HYDROCON_PATH + r"/Raw/"
+    state.HYDROCON_INTERIM_PATH = state.HYDROCON_PATH + r"/Interim/"
+    state.HYDROCON_PROCESSED_PATH = state.HYDROCON_PATH + r"/Processed/"
     
     # Create watershed subfolders in specified paths
-    SUBFOLDERS_LIST = [HYDROCON_RAW_PATH,
-                       HYDROCON_INTERIM_PATH,
-                       HYDROCON_PROCESSED_PATH]
+    SUBFOLDERS_LIST = [state.HYDROCON_RAW_PATH,
+                       state.HYDROCON_INTERIM_PATH,
+                       state.HYDROCON_PROCESSED_PATH]
     for sub in SUBFOLDERS_LIST:
         os.makedirs(sub, exist_ok=True)
 
     # Specify source and destination folders before moving files
-    src = Path(BS_DATA_PATH)
-    dst = Path(HYDROCON_RAW_PATH)
+    src = Path(state.BS_DATA_PATH)
+    dst = Path(state.HYDROCON_RAW_PATH)
     
     # Move files in base data folder to watershed folder
     for file in src.iterdir():
@@ -219,20 +188,59 @@ def set_directory_structure(default_watershed = "watershed_name", data_dir = Non
                 continue
             shutil.move(str(file), destination_file)
 
-    # Relevant variables that the user will want in the main script
-    dict = {"WATERSHED_NAME": WATERSHED_NAME,
-            "BS_DATA_PATH": BS_DATA_PATH,
-            "WATERSHED_PATH": WATERSHED_PATH,
-            "HYDROCON_PATH": HYDROCON_PATH,
-            "HYDROCON_RAW_PATH": HYDROCON_RAW_PATH,
-            "HYDROCON_INTERIM_PATH": HYDROCON_INTERIM_PATH,
-            "HYDROCON_PROCESSED_PATH": HYDROCON_PROCESSED_PATH}
-    
+        
     if recovery_mode:
-        RECOVERY_PATH = HYDROCON_INTERIM_PATH
-        dict["RECOVERY_PATH"] = RECOVERY_PATH
+        state.RECOVERY_PATH = state.HYDROCON_INTERIM_PATH
 
-    return dict
+    # Ending this and other functions with save_state() to store directory information in a pickle file for use in the main script
+    state.LAST_FUNCTION_RUN = "set_directory_structure"
+    save_state()
+
+    return state.__dict__
+
+
+def project_setup(watershed_default = "watershed_name", delineation_default = "finalcat_info_v1-0", lidar_default = "sr_dem_cgvd28", channels_default = "NHN_05OE000_5_0_HD_SLWATER_1", data_dir = None, recovery_mode = False):
+    
+    
+    # Organize data folders and files and store relevant directory information in a dictionary
+    # (user will be prompted to enter the watershed name to name the working directory after)
+    set_directory_structure(default_watershed = watershed_default, data_dir = data_dir, recovery_mode = recovery_mode)
+
+
+    # Name of watershed shapefile from CLRH hydrofabrics zip file (.shp)
+    state.CLRH_FILENAME = hydrocon_usr_input().file("hydrofabric shapefile", 
+                                                delineation_default) # This is the default for Manning Canal
+
+
+    # Name of LiDAR DEM raster from LiDAR DEM zip file (.tif)
+    # This can be multiple files, separated by commas (e.g., Boyne river requires multiple rasters))
+    # Multiple rasters will be merged into one in latter steps
+    state.LIDAR_FILENAME = hydrocon_usr_input().file("LiDAR DEM raster", 
+                                                lidar_default) # This is the default for Manning Canal
+
+
+    # Name of streams shapefile from NHN streams zip file (.shp)
+    state.NHN_FILENAME = hydrocon_usr_input().file("NHN streams shapefile", 
+                                                channels_default) # This is the default for Manning Canal
+
+
+    # Boolean object to indicate if there are multiple LiDAR DEM rasters
+    state.MULTIPLE_LIDAR_RASTERS = True if (isinstance(state.LIDAR_FILENAME, list) and len(state.LIDAR_FILENAME)) > 1 else False
+
+    # Ending this and other functions with save_state() to store directory information in a pickle file for use in the main script
+    state.LAST_FUNCTION_RUN = "project_setup"
+    save_state()
+
+    
+
+#=======================================FUNCTIONS========================================
+def read_shapefile(filename: str, directory: str):
+    shapefile = gpd.read_file(directory + \
+                              filename + \
+                              ".shp")
+    return shapefile
+
+
 
 def resample_lidar_raster(lidar_file, resolution_m):
     print("Starting resample_lidar_raster()...")
@@ -251,13 +259,15 @@ def resample_lidar_raster(lidar_file, resolution_m):
 
     print(f"Inside resample_lidar_raster(): The resampled file has been written to {LIDAR_RESAMPLED_FILE}.")
     print("resample_lidar_raster() has ended.")
+
+    state.LAST_FUNCTION_RUN = "resample_lidar_raster"
+    save_state()
     
     return LIDAR_RESAMPLED_FILE
 
 
 def clip_lidar_to_shapefile(projected_gdf,
-                           lidar_filename, lidar_directory,
-                           dict):
+                           lidar_filename, lidar_directory):
     print("Starting clip_lidar_to_shapefile()...")
     # Convert projected subbasins data to GeoJSON-like format
     shapes = [mapping(geom) for geom in projected_gdf.geometry]
@@ -281,7 +291,7 @@ def clip_lidar_to_shapefile(projected_gdf,
     })
 
     # Clipped DEM file name with path
-    LIDAR_CLIPPED_FILE = dict["HYDROCON_INTERIM_PATH"] + \
+    LIDAR_CLIPPED_FILE = state.HYDROCON_INTERIM_PATH + \
                          lidar_filename + \
                             "_clip"
 
@@ -294,14 +304,16 @@ def clip_lidar_to_shapefile(projected_gdf,
     print(f"Inside clip_lidar_to_shapefile(): the clipped file has been written to {LIDAR_CLIPPED_FILE}.")
     print("clip_lidar_to_shapefile() has ended.")
 
+    state.LAST_FUNCTION_RUN = "clip_lidar_to_shapefile"
+    save_state()
+
     return LIDAR_CLIPPED_FILE
 
 
 def clip_nhn_to_watershed(nhn_filename, 
                           clrh_proj_nhn_file,
                           input_DEM_crs,
-                          input_DEM_crs_alnum,
-                          dict):
+                          input_DEM_crs_alnum):
     
     print("Starting clip_nhn_to_watershed()...")
 
@@ -320,22 +332,22 @@ def clip_nhn_to_watershed(nhn_filename,
     wbt.set_whitebox_dir(wbt_dir)
 
     # Clipped NHN shapefile name with PATH
-    NHN_CLIPPED_FILE = dict["HYDROCON_INTERIM_PATH"] + \
+    state.NHN_CLIPPED_FILE = state.HYDROCON_INTERIM_PATH + \
                         nhn_filename + \
                         "_clip"
 
     # Clip NHN streams shapefile to watershed
     wbt.clip(
-    i=dict["HYDROCON_RAW_PATH"]+nhn_filename+".shp",
+    i=state.HYDROCON_RAW_PATH+nhn_filename+".shp",
     clip=clrh_proj_nhn_file+".shp",
-    output=NHN_CLIPPED_FILE+".shp"
+    output=state.NHN_CLIPPED_FILE+".shp"
     )
 
     # Return to original working directory
     os.chdir(original_dir)
 
     # Load NHN streams shapefile
-    nhn_gdf_clip = gpd.read_file(NHN_CLIPPED_FILE + \
+    nhn_gdf_clip = gpd.read_file(state.NHN_CLIPPED_FILE + \
                                 ".shp")
 
 
@@ -343,12 +355,12 @@ def clip_nhn_to_watershed(nhn_filename,
     nhn_gdf_clip_projected_lidar = nhn_gdf_clip.to_crs(input_DEM_crs)
 
     # Clipped and projected NHN shapefile name with path
-    NHN_CLIPPED_PROJECTED_LIDAR_FILE = dict["HYDROCON_INTERIM_PATH"] + \
+    state.NHN_CLIPPED_PROJECTED_LIDAR_FILE = state.HYDROCON_INTERIM_PATH + \
                                         nhn_filename + \
                                         f"_clip_projected_{input_DEM_crs_alnum}"
 
     # Write clipped and projected NHN shapefile
-    nhn_gdf_clip_projected_lidar.to_file(NHN_CLIPPED_PROJECTED_LIDAR_FILE + \
+    nhn_gdf_clip_projected_lidar.to_file(state.NHN_CLIPPED_PROJECTED_LIDAR_FILE + \
                                         ".shp")
 
     # Check if shapefile projection aligns with DEM projection
@@ -360,14 +372,16 @@ def clip_nhn_to_watershed(nhn_filename,
     print("clip_nhn_to_watershed() has ended.")
     print("clip_nhn_to_watershed has ended.")
 
-    return NHN_CLIPPED_PROJECTED_LIDAR_FILE
+    state.LAST_FUNCTION_RUN = "clip_nhn_to_watershed"
+    save_state()
+
+    return state.NHN_CLIPPED_PROJECTED_LIDAR_FILE
 
 
 def gen_depressions_raster(lidar_filename,
                             lidar_clipped_resampled_file,
                             nhn_clipped_projected_lidar_file,
-                            resolution_m,
-                            dict):
+                            resolution_m):
     print("Starting gen_depressions_raster()...")
 
     # Get path to the folder where THIS file lives (required to access WhiteboxTools)
@@ -401,14 +415,14 @@ def gen_depressions_raster(lidar_filename,
 
 
     # Depressions raster file with path
-    DEPRESSIONS_RASTER_FILE = dict["HYDROCON_PROCESSED_PATH"]+lidar_filename+\
+    state.DEPRESSIONS_RASTER_FILE = state.HYDROCON_PROCESSED_PATH + lidar_filename + \
                             f"_clip_resample_{resolution_m}m_FillBurn_Deps_Corr"
 
 
     # Remove stray burn lines
     wbt.conditional_evaluation(
         i=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif",
-        output=DEPRESSIONS_RASTER_FILE+".tif",
+        output=state.DEPRESSIONS_RASTER_FILE+".tif",
         statement="value < 0.0",
         true=0.0,
         false=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif"
@@ -418,20 +432,22 @@ def gen_depressions_raster(lidar_filename,
     os.chdir(original_dir)
 
     print("Inside gen_depressions_raster(): The depressions raster has been generated and saved to: ",
-          DEPRESSIONS_RASTER_FILE + ".tif")
+          state.DEPRESSIONS_RASTER_FILE + ".tif")
     
-    return DEPRESSIONS_RASTER_FILE
+    state.LAST_FUNCTION_RUN = "gen_depressions_raster"
+    save_state()
+    
+    return state.DEPRESSIONS_RASTER_FILE
 
 
 def calc_depression_depths(clrh_proj_lidar_file,
                            watershed_name,
                            depressions_raster_file,
-                           clrh_gdf_projected_lidar,
-                           dict):
+                           clrh_gdf_projected_lidar):
     print("Starting calc_depression_depths()...")
 
     # CLRH subbasins raster file name with path 
-    CLRH_RASTER_FILE = clrh_proj_lidar_file + "_raster"
+    state.CLRH_RASTER_FILE = clrh_proj_lidar_file + "_raster"
 
     # Get path to the folder where THIS file lives (required to access WhiteboxTools)
     this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -449,20 +465,20 @@ def calc_depression_depths(clrh_proj_lidar_file,
     # # Convert clrh subbasin polygons to raster
     wbt.vector_polygons_to_raster(
         i=clrh_proj_lidar_file+".shp",
-        output=CLRH_RASTER_FILE+".tif",
+        output=state.CLRH_RASTER_FILE+".tif",
         field = "FID",
         nodata = True,
         cell_size = 5.0
     )
 
     # Open clrh subbasins raster file
-    with rasterio.open(CLRH_RASTER_FILE+".tif") as src:
+    with rasterio.open(state.CLRH_RASTER_FILE+".tif") as src:
         target_crs = 26914
         profile = src.profile
         profile.update(crs=CRS.from_epsg(target_crs))
     
     # Zonal stats file name with path
-    ZONAL_STATS_FILE = Path(dict["HYDROCON_PROCESSED_PATH"], 
+    state.ZONAL_STATS_FILE = Path(state.HYDROCON_PROCESSED_PATH, 
                     f"ZonalStats_{watershed_name}.html").resolve()
 
 
@@ -477,21 +493,21 @@ def calc_depression_depths(clrh_proj_lidar_file,
         str(rasterio.open(depressions_raster_file + ".tif").bounds.bottom),
         str(rasterio.open(depressions_raster_file + ".tif").bounds.right),
         str(rasterio.open(depressions_raster_file + ".tif").bounds.top),
-        CLRH_RASTER_FILE + ".tif",
-        CLRH_RASTER_FILE + "_aligned" + ".tif"
+        state.CLRH_RASTER_FILE + ".tif",
+        state.CLRH_RASTER_FILE + "_aligned" + ".tif"
     ])
 
 
     # Calculate zonal statistics for depression raster
     wbt.zonal_statistics(
         i=depressions_raster_file + ".tif",
-        features=CLRH_RASTER_FILE + "_aligned" + ".tif",
+        features=state.CLRH_RASTER_FILE + "_aligned" + ".tif",
         stat="total",
-        out_table=ZONAL_STATS_FILE
+        out_table=state.ZONAL_STATS_FILE
     )
 
     # Read zonal stats html as pandas df
-    zonal_stats_df = pd.read_html(ZONAL_STATS_FILE,
+    zonal_stats_df = pd.read_html(state.ZONAL_STATS_FILE,
                                 flavor='bs4')[0]
 
     # Calculate depression depths (mm) and add field to gdf
@@ -501,20 +517,22 @@ def calc_depression_depths(clrh_proj_lidar_file,
     clrh_gdf_projected_lidar['Deps_Vol_m3'] = clrh_gdf_projected_lidar['Deps_Depth_mm']*clrh_gdf_projected_lidar['BasArea']
     
     # Depression depths file name with path
-    DEPRESSION_DEPTHS_FILE = dict["HYDROCON_PROCESSED_PATH"] + \
+    state.DEPRESSION_DEPTHS_FILE = state.HYDROCON_PROCESSED_PATH + \
                             "CLRH_basins_depression_depths"
 
     # Write geodataframe to file for use in raven input file creation
-    clrh_gdf_projected_lidar.to_file(DEPRESSION_DEPTHS_FILE + ".shp")
+    clrh_gdf_projected_lidar.to_file(state.DEPRESSION_DEPTHS_FILE + ".shp")
 
     # Return to original working directory
     os.chdir(original_dir)
 
-    return DEPRESSION_DEPTHS_FILE
+    state.LAST_FUNCTION_RUN = "calc_depression_depths"
+    save_state()
+
+    return state.DEPRESSION_DEPTHS_FILE
 
 
-def gen_wetland_polygons(depressions_raster_file,
-                         dict):
+def gen_wetland_polygons(depressions_raster_file):
     print("Starting gen_wetland_polygons()...")
 
     # Load the depression depths raster
@@ -573,8 +591,8 @@ def gen_wetland_polygons(depressions_raster_file,
 
 
     # Write stats to CSV
-    WETLANDS_STATS_CSV = dict["HYDROCON_PROCESSED_PATH"] + "Wetlands_Stats.csv"
-    wetlands_df_stats.to_csv(WETLANDS_STATS_CSV, index=False) 
+    state.WETLANDS_STATS_CSV = state.HYDROCON_PROCESSED_PATH + "Wetlands_Stats.csv"
+    wetlands_df_stats.to_csv(state.WETLANDS_STATS_CSV, index=False) 
 
     # Create mask of valid wetland IDs (from filtered df_stats)
     valid_ids = set(wetlands_df_stats["wetland_id"])
@@ -604,18 +622,20 @@ def gen_wetland_polygons(depressions_raster_file,
     gdf = gdf.merge(wetlands_df_stats, on='wetland_id')
 
     # Write results to shapefile
-    WETLANDS_POLYGONS_SHAPEFILE = dict["HYDROCON_PROCESSED_PATH"] + "Wetlands_Polygons_with_Stats.shp"
-    gdf.to_file(WETLANDS_POLYGONS_SHAPEFILE)
+    state.WETLANDS_POLYGONS_SHAPEFILE = state.HYDROCON_PROCESSED_PATH + "Wetlands_Polygons_with_Stats.shp"
+    gdf.to_file(state.WETLANDS_POLYGONS_SHAPEFILE)
 
-    print("Inside gen_wetland_polygons(): Wetland polygons have been generated and saved to: ", WETLANDS_POLYGONS_SHAPEFILE)
+    print("Inside gen_wetland_polygons(): Wetland polygons have been generated and saved to: ", state.WETLANDS_POLYGONS_SHAPEFILE)
 
-    return WETLANDS_POLYGONS_SHAPEFILE, gdf
+    state.LAST_FUNCTION_RUN = "gen_wetland_polygons"
+    save_state()
+
+    return state.WETLANDS_POLYGONS_SHAPEFILE, gdf
 
 
 def project_crs_subbasins_to_nhn(nhn_gdf, 
                              subbasins_gdf,
-                             subbasins_filename, 
-                             dict):
+                             subbasins_filename):
     print("Starting project_crs_subbasins_to_nhn()...")
 
     # CRS for NHN shapefile
@@ -635,13 +655,13 @@ def project_crs_subbasins_to_nhn(nhn_gdf,
 
 
     # Projected subbasins shapefile name with path
-    SUBBASINS_PROJ_NHN_FILE = dict["HYDROCON_INTERIM_PATH"] + \
+    state.SUBBASINS_PROJ_NHN_FILE = state.HYDROCON_INTERIM_PATH + \
                             subbasins_filename + \
                             f"_projected_{input_NHN_crs_alnum}" 
 
 
     # Write projected subbasins data to shapefile
-    subbasins_gdf_projected_nhn.to_file(SUBBASINS_PROJ_NHN_FILE + \
+    subbasins_gdf_projected_nhn.to_file(state.SUBBASINS_PROJ_NHN_FILE + \
                                 ".shp")
 
 
@@ -652,17 +672,18 @@ def project_crs_subbasins_to_nhn(nhn_gdf,
     # Print results
     print("Inside project_subbasins_to_nhn(): Shapefile projection is aligned with NHN projection: ", 
         is_correctly_projected_clrh_nhn)
-    print(f"Inside project_subbasins_to_nhn(): The projected shapefile has been written to {SUBBASINS_PROJ_NHN_FILE}.")
+    print(f"Inside project_subbasins_to_nhn(): The projected shapefile has been written to {state.SUBBASINS_PROJ_NHN_FILE}.")
     print("project_crs_subbasins_to_nhn() has ended.")
 
+    state.LAST_FUNCTION_RUN = "project_crs_subbasins_to_nhn"
+    save_state()
 
     # Return projected subbasins shapefile
-    return subbasins_gdf_projected_nhn, SUBBASINS_PROJ_NHN_FILE
+    return subbasins_gdf_projected_nhn, state.SUBBASINS_PROJ_NHN_FILE
 
 
 def project_subbasins_to_lidar(gdf, gdf_filename,
-                                   lidar_filename, lidar_directory,
-                                   dict):
+                                   lidar_filename, lidar_directory):
     print("Starting project_crs_subbasins_to_lidar()...")
                                        
     with rasterio.open(lidar_directory + \
@@ -681,12 +702,12 @@ def project_subbasins_to_lidar(gdf, gdf_filename,
         input_DEM_crs_alnum = input_DEM_crs_alnum[:10]  
     
     # Projected subbasins shapefile name with path
-    CLRH_PROJ_LIDAR_FILE = dict["HYDROCON_INTERIM_PATH"] + \
+    state.CLRH_PROJ_LIDAR_FILE = state.HYDROCON_INTERIM_PATH + \
                             gdf_filename + \
                             f"_projected_{input_DEM_crs_alnum}"
     
     # Write projected subbasins data to shapefile
-    clrh_gdf_projected_lidar.to_file(CLRH_PROJ_LIDAR_FILE + ".shp")
+    clrh_gdf_projected_lidar.to_file(state.CLRH_PROJ_LIDAR_FILE + ".shp")
     
     # Check if shapefile projection aligns with DEM projection
     is_correctly_projected_clrh_lidar = (input_DEM_crs == clrh_gdf_projected_lidar.crs)         
@@ -694,13 +715,16 @@ def project_subbasins_to_lidar(gdf, gdf_filename,
     # Print results
     print("Inside project_crs_subbasins_to_lidar(): Shapefile projection is aligned with DEM projection: ", 
           is_correctly_projected_clrh_lidar)
-    print(f"Inside project_crs_subbasins_to_lidar(): The projected shapefile has been written to {CLRH_PROJ_LIDAR_FILE}.")
+    print(f"Inside project_crs_subbasins_to_lidar(): The projected shapefile has been written to {state.CLRH_PROJ_LIDAR_FILE}.")
     print("project_crs_subbasins_to_lidar() has ended.")
 
-    return clrh_gdf_projected_lidar, input_DEM_crs, input_DEM_crs_alnum, CLRH_PROJ_LIDAR_FILE
+    state.LAST_FUNCTION_RUN = "project_crs_subbasins_to_lidar"
+    save_state()
+
+    return clrh_gdf_projected_lidar, input_DEM_crs, input_DEM_crs_alnum, state.CLRH_PROJ_LIDAR_FILE
 
 
-def merge_rasters(lidar_files, gdf, dict):
+def merge_rasters(lidar_files, gdf):
     print("Starting merge_rasters()....")
     
     # Turn string input into list
@@ -711,7 +735,7 @@ def merge_rasters(lidar_files, gdf, dict):
         # 1. Project shapefile to match raster CRS
 
         # Open raster file and read its CRS
-        with rasterio.open(dict["HYDROCON_RAW_PATH"] + \
+        with rasterio.open(state.HYDROCON_RAW_PATH + \
                         file + \
                         ".tif") as src:
             input_DEM_crs = src.crs
@@ -728,7 +752,7 @@ def merge_rasters(lidar_files, gdf, dict):
         shapes = [mapping(geom) for geom in clrh_gdf_projected.geometry]
 
         # Mask (clip) the input DEM file
-        with rasterio.open(dict["HYDROCON_RAW_PATH"] + \
+        with rasterio.open(state.HYDROCON_RAW_PATH + \
                             file + \
                             ".tif") as src:
             nodata_value = src.nodata
@@ -751,12 +775,12 @@ def merge_rasters(lidar_files, gdf, dict):
         })
 
         # Clipped DEM file name with path
-        LIDAR_CLIPPED_FILE = dict["HYDROCON_INTERIM_PATH"] + \
+        state.LIDAR_CLIPPED_FILE = state.HYDROCON_INTERIM_PATH + \
                                 file + \
                                 "_clip"
 
         # Write clipped DEM data into file
-        with rasterio.open(LIDAR_CLIPPED_FILE + ".tif",
+        with rasterio.open(state.LIDAR_CLIPPED_FILE + ".tif",
                         "w", 
                         **out_meta) as dest:
             dest.write(out_image)
@@ -766,7 +790,7 @@ def merge_rasters(lidar_files, gdf, dict):
     # 2. Find the CRS for the highest resolution raster
     
     # Record the paths of all clipped raster files
-    clipped_raster_paths = glob(f"{dict["HYDROCON_INTERIM_PATH"]}*_clip.tif")
+    clipped_raster_paths = glob(f"{state.HYDROCON_INTERIM_PATH}*_clip.tif")
 
 
     # Function to get the resolution of a raster file
@@ -802,7 +826,7 @@ def merge_rasters(lidar_files, gdf, dict):
         out_filename = os.path.splitext(os.path.basename(path))[0] + \
                                 "_reprojected.tif"
         # Output file path
-        out_path = os.path.join(dict["HYDROCON_INTERIM_PATH"], out_filename)
+        out_path = os.path.join(state.HYDROCON_INTERIM_PATH, out_filename)
         
         with rasterio.open(path) as src:
             # Check if the raster's CRS is different from the target CRS
@@ -857,9 +881,9 @@ def merge_rasters(lidar_files, gdf, dict):
     # 4. Merge all rasters together
 
     # Path for the merged output raster
-    LIDAR_FILENAME_NEW = "merged_average_dem"
-    out_path_merged = os.path.join(dict["HYDROCON_INTERIM_PATH"], LIDAR_FILENAME_NEW + ".tif")
-    out_path_merged_vrt = os.path.join(dict["HYDROCON_INTERIM_PATH"], "merged_virtual_raster.vrt")
+    state.LIDAR_FILENAME_NEW = "merged_average_dem"
+    out_path_merged = os.path.join(state.HYDROCON_INTERIM_PATH, state.LIDAR_FILENAME_NEW + ".tif")
+    out_path_merged_vrt = os.path.join(state.HYDROCON_INTERIM_PATH, "merged_virtual_raster.vrt")
 
 
     # Create a visual raster that includes all input rasters 
@@ -893,7 +917,7 @@ def merge_rasters(lidar_files, gdf, dict):
     # Path to the merged raster (input for filling nodata values)
     input_raster = out_path_merged
     # Path to the filled output raster
-    output_raster = os.path.join(dict["HYDROCON_INTERIM_PATH"], "merged_average_dem_filled.tif")
+    output_raster = os.path.join(state.HYDROCON_INTERIM_PATH, state.LIDAR_FILENAME_NEW + "_filled.tif")
 
 
     def fill_with_buffer(src, dst, band_index=1, nodata_val=-9999, buffer=20):
@@ -977,24 +1001,22 @@ def merge_rasters(lidar_files, gdf, dict):
 
 #--------------------RECOVERY FUNCTIONS------------------------
 
-def recover_directory_dict(recovery_path = None):
+def recover_state(recovery_path = None):
 
     ## Recover dictionary from pickle file (for testing purposes)
-    if 'DIRECTORY_DICT' not in globals():
+    if "state" not in globals():
         if recovery_path is None:
-            recovery_path = input("DIRECTORY_DICT not found in current session. Enter the recovery folder path to load from pickle file.")
-        pickle_file_path = Path(recovery_path) / "directory_dict.pkl"
+            recovery_path = input("State data not found in current session. Enter the recovery folder path to load from pickle file.")
+        pickle_file_path = Path(recovery_path) / "state.pkl"
         
         try:
             with open(pickle_file_path, 'rb') as f:
-                directory_dict = pickle.load(f)
+                state = pickle.load(f)
 
                 # Promote the dictionary and its contents to global scope so that it can be accessed in the main script
-                globals()["DIRECTORY_DICT"] = directory_dict
-                for key, value in directory_dict.items():
-                    globals()[key] = value
+                globals()["state"] = state
 
-            print(f"DIRECTORY_DICT loaded from: {pickle_file_path}")
+            print(f"State data loaded from: {pickle_file_path}")
             
         except FileNotFoundError:
             raise FileNotFoundError(f"Pickle file not found at: {pickle_file_path}")

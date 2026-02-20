@@ -3,6 +3,7 @@
 
 # Ignore Python cache files
 __pycache__/
+pwa_tools/WBT/__pycache__/
 *.py[cod]
 
 # Ignore whitebox
