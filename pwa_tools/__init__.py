@@ -1005,20 +1005,18 @@ def merge_rasters(lidar_files, gdf):
 
 #--------------------RECOVERY FUNCTIONS------------------------
 
-def recover_state(recovery_path = None):
+def recover_state(recovery_path = None, last_function_expected = state.LAST_FUNCTION_RUN):
 
-    ## Recover dictionary from pickle file (for testing purposes)
-    if "state" not in globals():
+    if state.LAST_FUNCTION_RUN != last_function_expected:
+        print(f"Last function was not the expected {last_function_expected}. Attempting to recover state from pickle file.")
+        ## Recover dictionary from pickle file (for testing purposes)
         if recovery_path is None:
             recovery_path = input("State data not found in current session. Enter the recovery folder path to load from pickle file.")
         pickle_file_path = Path(recovery_path) / "state.pkl"
         
         try:
             with open(pickle_file_path, 'rb') as f:
-                state = pickle.load(f)
-
-                # Promote the dictionary and its contents to global scope so that it can be accessed in the main script
-                globals()["state"] = state
+                globals()["state"] = pickle.load(f)
 
             print(f"State data loaded from: {pickle_file_path}")
             
