@@ -1,4 +1,6 @@
-# Sytem
+# Adapted for PWA-hydro-conditioning-tools v. 1.0 
+
+# System
 import pickle
 import os
 import sys
@@ -38,8 +40,10 @@ import rasterio.plot
 
 
 # Whitebox
-from .WBT.whitebox_tools import WhiteboxTools  
-
+try:
+    from .WBT.whitebox_tools import WhiteboxTools  
+except ImportError:
+    from WBT.whitebox_tools import WhiteboxTools  # alternative import statement for testing in Jupyter notebook (when the package is not installed)
 
 #======================================SETUP========================================
 

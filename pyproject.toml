@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pwa-tools"
-version = "1.0.0" # Reminder to update this version number as needed.
+version = "1.0.1" # Reminder to update this version number as needed.
 description = "Hydro conditioning tools for PWA workflows"
 readme = "README.md"
 requires-python = ">=3.8"
