@@ -133,7 +133,7 @@ def save_state():
 
     print(f"Project setup complete. Data organized in directory: {state.WATERSHED_PATH}")
 
-def set_directory_structure(default_watershed = "watershed_name", data_dir = None, recovery_mode = False):
+def set_directory_structure(default_watershed = "cypress_river", data_dir = None, recovery_mode = False):
     """
     Creates and organizes the directory structure for hydro conditioning.
     Moves files to the appropriate directories.
@@ -203,7 +203,7 @@ def set_directory_structure(default_watershed = "watershed_name", data_dir = Non
     return state.__dict__
 
 
-def project_setup(watershed_default = "watershed_name", delineation_default = "finalcat_info_v1-0", lidar_default = "sr_dem_cgvd28", channels_default = "NHN_05OE000_5_0_HD_SLWATER_1", data_dir = None, recovery_mode = False):
+def project_setup(watershed_default = "cypress_river", delineation_default = "finalcat_info_v1-0", lidar_default = "Pembina_LiDAR_DEM", channels_default = "NHN_05MH000_3_0_HD_SLWATER_1", data_dir = None, recovery_mode = False):
     
     
     # Organize data folders and files and store relevant directory information in a dictionary
