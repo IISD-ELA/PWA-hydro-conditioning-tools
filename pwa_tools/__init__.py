@@ -1,4 +1,5 @@
 # Sytem
+import pickle
 import os
 import sys
 import fileinput
@@ -40,7 +41,16 @@ import rasterio.plot
 from .WBT.whitebox_tools import WhiteboxTools  
 
 
-#======================================CLASSES========================================
+#======================================SETUP========================================
+
+#-------------------------------USER INPUT CLASS AND FUNCTIONS--------------------------------
+def snake_case(string):
+    """
+    Converts a given string to snake_case format.
+    """
+    # Replace spaces and hyphens with underscores, and convert to lowercase
+    return string.replace(" ", "_").replace("-", "_").lower()
+
 class hydrocon_usr_input:
     def string(self, description, default_value=None):
         """
@@ -55,7 +65,8 @@ class hydrocon_usr_input:
         elif user_input == "":
             while user_input == "":
                 user_input = input(f"A value is required. " + prompt).strip()
-        return user_input
+        out_str = snake_case(user_input)
+        return out_str
     
     def file(self, description, default_value=None):
         """
@@ -84,7 +95,62 @@ class hydrocon_usr_input:
                 filename = default_value
                 print(f"No {description} name provided. Default applied ('{default_value}').")
         return filename
+
+
+#---------------------------------PROJECT SETUP CLASS AND FUNCTIONS--------------------------------
+class project_state:
     
+
+def project_setup(watershed_default = "watershed_name", delineation_default = "finalcat_info_v1-0", lidar_default = "sr_dem_cgvd28", channels_default = "NHN_05OE000_5_0_HD_SLWATER_1", data_dir = None, recovery_mode = False):
+    # Organize data folders and files and store relevant directory information in a dictionary
+    # (user will be prompted to enter the watershed name to name the working directory after)
+    DIRECTORY_DICT = set_directory_structure(default_watershed = watershed_default, data_dir = data_dir, recovery_mode = recovery_mode)
+
+
+    # Name of watershed shapefile from CLRH hydrofabrics zip file (.shp)
+    CLRH_FILENAME = hydrocon_usr_input().file("hydrofabric shapefile", 
+                                                delineation_default) # This is the default for Manning Canal
+
+
+    # Name of LiDAR DEM raster from LiDAR DEM zip file (.tif)
+    # This can be multiple files, separated by commas (e.g., Boyne river requires multiple rasters))
+    # Multiple rasters will be merged into one in latter steps
+    LIDAR_FILENAME = hydrocon_usr_input().file("LiDAR DEM raster", 
+                                                lidar_default) # This is the default for Manning Canal
+
+
+    # Name of streams shapefile from NHN streams zip file (.shp)
+    NHN_FILENAME = hydrocon_usr_input().file("NHN streams shapefile", 
+                                                channels_default) # This is the default for Manning Canal
+
+
+    # Boolean object to indicate if there are multiple LiDAR DEM rasters
+    MULTIPLE_LIDAR_RASTERS = True if (isinstance(LIDAR_FILENAME, list) and len(LIDAR_FILENAME)) > 1 else False
+
+    # Add relevant variables to the dictionary
+    DIRECTORY_DICT["CLRH_FILENAME"] = CLRH_FILENAME
+    DIRECTORY_DICT["LIDAR_FILENAME"] = LIDAR_FILENAME
+    DIRECTORY_DICT["NHN_FILENAME"] = NHN_FILENAME
+    DIRECTORY_DICT["MULTIPLE_LIDAR_RASTERS"] = MULTIPLE_LIDAR_RASTERS
+
+    # Store DIRECTORY_DICT as pickle file for use in main script
+    try:
+        pickle_file_path = Path(DIRECTORY_DICT["RECOVERY_PATH"]) / "directory_dict.pkl"
+        with open(pickle_file_path, 'wb') as f:
+            pickle.dump(DIRECTORY_DICT, f)
+        print(f"DIRECTORY_DICT saved to: {DIRECTORY_DICT['RECOVERY_PATH']}")
+
+    except KeyError:
+        print("Recovery mode not enabled. Directory information not saved to pickle file.")
+
+    print(f"Project setup complete. Data organized in directory: {DIRECTORY_DICT['WATERSHED_PATH']}")
+
+    
+    # Promote the dictionary and its contents to global scope so that it can be accessed in the main script
+    globals()["DIRECTORY_DICT"] = DIRECTORY_DICT
+    for key, value in DIRECTORY_DICT.items():
+        globals()[key] = value
+
 
 #=======================================FUNCTIONS========================================
 def read_shapefile(filename: str, directory: str):
@@ -94,19 +160,29 @@ def read_shapefile(filename: str, directory: str):
     return shapefile
 
 
-def set_directory_structure():
+def set_directory_structure(default_watershed = "watershed_name", data_dir = None, recovery_mode = False):
     """
     Creates and organizes the directory structure for hydro conditioning.
     Moves files to the appropriate directories.
+
+-------    Parameters:
+    data_dir (str, optional): The relative path to the base raw data folder. If None, it defaults to the current working directory + "/Data/".
+    recovery_mode (bool, optional): If True, functions in this project will store outputs as pkl files in the interim data folder, and this function  
+        will load the directory dictionary from a pkl file in the interim data folder instead of creating a new directory structure.  
+        This is for testing purposes to ensure that the same directory structure is used across different sessions.
     """
+    
     # Ask user to input watershed name (default is "Manning")
-    WATERSHED_NAME = hydrocon_usr_input().string("watershed", "Manning")
+    WATERSHED_NAME = hydrocon_usr_input().string("Provide the name of your watershed", default_watershed)
 
     # Path for the parent directory of the user's current script
     CURRENT_PATH = str(Path.cwd())
 
     # Path for base raw data folder
-    BS_DATA_PATH = CURRENT_PATH + r"/Data/"
+    if data_dir is not None:
+        BS_DATA_PATH = CURRENT_PATH + data_dir
+    else:
+        BS_DATA_PATH = CURRENT_PATH + r"/Data/"
     
     # Specify path for watershed folder
     WATERSHED_PATH = BS_DATA_PATH + WATERSHED_NAME
@@ -151,9 +227,12 @@ def set_directory_structure():
             "HYDROCON_RAW_PATH": HYDROCON_RAW_PATH,
             "HYDROCON_INTERIM_PATH": HYDROCON_INTERIM_PATH,
             "HYDROCON_PROCESSED_PATH": HYDROCON_PROCESSED_PATH}
+    
+    if recovery_mode:
+        RECOVERY_PATH = HYDROCON_INTERIM_PATH
+        dict["RECOVERY_PATH"] = RECOVERY_PATH
 
     return dict
-
 
 def resample_lidar_raster(lidar_file, resolution_m):
     print("Starting resample_lidar_raster()...")
@@ -895,3 +974,30 @@ def merge_rasters(lidar_files, gdf, dict):
     print("merge_rasters() has ended.")
     return LIDAR_FILENAME_NEW
                   
+
+#--------------------RECOVERY FUNCTIONS------------------------
+
+def recover_directory_dict(recovery_path = None):
+
+    ## Recover dictionary from pickle file (for testing purposes)
+    if 'DIRECTORY_DICT' not in globals():
+        if recovery_path is None:
+            recovery_path = input("DIRECTORY_DICT not found in current session. Enter the recovery folder path to load from pickle file.")
+        pickle_file_path = Path(recovery_path) / "directory_dict.pkl"
+        
+        try:
+            with open(pickle_file_path, 'rb') as f:
+                directory_dict = pickle.load(f)
+
+                # Promote the dictionary and its contents to global scope so that it can be accessed in the main script
+                globals()["DIRECTORY_DICT"] = directory_dict
+                for key, value in directory_dict.items():
+                    globals()[key] = value
+
+            print(f"DIRECTORY_DICT loaded from: {pickle_file_path}")
+            
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Pickle file not found at: {pickle_file_path}")
+        
+    
+
