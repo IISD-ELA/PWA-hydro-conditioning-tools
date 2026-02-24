@@ -203,7 +203,7 @@ def set_directory_structure(default_watershed = "cypress_river", data_dir = None
     return state.__dict__
 
 
-def project_setup(watershed_default = "cypress_river", delineation_default = "finalcat_info_v1-0", lidar_default = "Pembina_LiDAR_DEM", channels_default = "NHN_05MH000_3_0_HD_SLWATER_1", data_dir = None, recovery_mode = False):
+def project_setup(watershed_default = "cypress_river", delineation_default = "finalcat_info_v1-0", lidar_default = "Pembina_LiDAR_DEM", channels_default = "NHN_05MH000_3_0_HD_SLWATER_1", culvert_default = "", crs_default = "EPSG:32616", data_dir = None, recovery_mode = False):
     
     
     # Organize data folders and files and store relevant directory information in a dictionary
@@ -226,24 +226,38 @@ def project_setup(watershed_default = "cypress_river", delineation_default = "fi
     # Name of streams shapefile from NHN streams zip file (.shp)
     state.NHN_FILENAME = hydrocon_usr_input().file("NHN streams shapefile", 
                                                 channels_default) # This is the default for Manning Canal
+    
+    state.CULVERT_FILENAME = hydrocon_usr_input().file("Culvert lines shapefile (optional)", 
+                                                culvert_default) 
 
-
+    state.crs_string = input("Preferred coordinate reference system (EPSG Code, Default 32616): ") or crs_default 
+                                                    
     # Boolean object to indicate if there are multiple LiDAR DEM rasters
     state.MULTIPLE_LIDAR_RASTERS = True if (isinstance(state.LIDAR_FILENAME, list) and len(state.LIDAR_FILENAME)) > 1 else False
 
     # Ending this and other functions with save_state() to store directory information in a pickle file for use in the main script
     state.LAST_FUNCTION_RUN = "project_setup"
     save_state()
-
     
 
 #=======================================FUNCTIONS========================================
-def read_shapefile(filename: str, directory: str):
-    shapefile = gpd.read_file(directory + \
+
+def read_shapefile(filename: str, directory: str, new_crs = ''):
+    """
+    Reads a shapefile and reprojects it to the project CRS (default) or a specified new CRS.
+    """
+
+    shape_in = gpd.read_file(directory + \
                               filename + \
                               ".shp")
-    return shapefile
+    if len(new_crs) > 0 and shape_in.crs != new_crs:
+        shape_out = shape_in.to_crs(new_crs)
+    elif shape_in.crs != state.crs_string:
+        shape_out = shape_in.to_crs(state.crs_string)
 
+    state.log = f'Loaded {filename} to gdf and projected CRS from {shape_in.crs} to {shape_out.crs}.'
+
+    return shape_out
 
 
 def resample_lidar_raster(lidar_file, resolution_m):
