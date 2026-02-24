@@ -240,7 +240,9 @@ def project_setup(watershed_default = "cypress_river", delineation_default = "fi
     save_state()
     
 
-#=======================================FUNCTIONS========================================
+##=======================================FUNCTIONS========================================
+
+##--------------------------------------DATA HANDLING------------------------------------
 
 def read_shapefile(filename: str, directory: str, new_crs = ''):
     """
@@ -282,6 +284,132 @@ def resample_lidar_raster(lidar_file, resolution_m):
     save_state()
     
     return LIDAR_RESAMPLED_FILE
+
+
+def project_crs_subbasins_to_nhn(nhn_gdf, 
+                             subbasins_gdf,
+                             subbasins_filename):
+    print("Starting project_crs_subbasins_to_nhn()...")
+
+    # CRS for NHN shapefile
+    input_NHN_crs = nhn_gdf.crs
+
+
+    # Project subbasins data to match streams data
+    subbasins_gdf_projected_nhn = subbasins_gdf.to_crs(input_NHN_crs)
+
+
+    # Remove any non-alphanumeric characters from crs name
+    input_NHN_crs_alnum = ''.join(c for c in \
+                                str(input_NHN_crs) if c.isalnum())
+    if len(input_NHN_crs_alnum) > 10:
+        # truncate to first 10 characters to avoid errors due to long file names
+        input_NHN_crs_alnum = input_NHN_crs_alnum[:10]
+
+
+    # Projected subbasins shapefile name with path
+    state.SUBBASINS_PROJ_NHN_FILE = state.HYDROCON_INTERIM_PATH + \
+                            subbasins_filename + \
+                            f"_projected_{input_NHN_crs_alnum}" 
+
+
+    # Write projected subbasins data to shapefile
+    subbasins_gdf_projected_nhn.to_file(state.SUBBASINS_PROJ_NHN_FILE + \
+                                ".shp")
+
+
+    # Check if shapefile projection aligns with DEM projection
+    is_correctly_projected_clrh_nhn = (input_NHN_crs == subbasins_gdf_projected_nhn.crs)
+                            
+
+    # Print results
+    print("Inside project_subbasins_to_nhn(): Shapefile projection is aligned with NHN projection: ", 
+        is_correctly_projected_clrh_nhn)
+    print(f"Inside project_subbasins_to_nhn(): The projected shapefile has been written to {state.SUBBASINS_PROJ_NHN_FILE}.")
+    print("project_crs_subbasins_to_nhn() has ended.")
+
+    state.LAST_FUNCTION_RUN = "project_crs_subbasins_to_nhn"
+    save_state()
+
+    # Return projected subbasins shapefile
+    return subbasins_gdf_projected_nhn, state.SUBBASINS_PROJ_NHN_FILE
+
+
+def project_subbasins_to_lidar(gdf, gdf_filename,
+                                   lidar_filename, lidar_directory):
+    print("Starting project_crs_subbasins_to_lidar()...")
+                                       
+    with rasterio.open(lidar_directory + \
+                       lidar_filename + \
+                       ".tif") as src:
+        input_DEM_crs = src.crs
+    
+    # Project subbasins data to match DEM
+    clrh_gdf_projected_lidar = gdf.to_crs(input_DEM_crs)
+    
+    # Remove any non-alphanumeric characters from crs name
+    input_DEM_crs_alnum = ''.join(c for c in \
+                                  str(input_DEM_crs) if c.isalnum())
+    if len(input_DEM_crs_alnum) > 10:
+        # truncate to first 10 characters to avoid errors due to long file names
+        input_DEM_crs_alnum = input_DEM_crs_alnum[:10]  
+    
+    # Projected subbasins shapefile name with path
+    state.CLRH_PROJ_LIDAR_FILE = state.HYDROCON_INTERIM_PATH + \
+                            gdf_filename + \
+                            f"_projected_{input_DEM_crs_alnum}"
+    
+    # Write projected subbasins data to shapefile
+    clrh_gdf_projected_lidar.to_file(state.CLRH_PROJ_LIDAR_FILE + ".shp")
+    
+    # Check if shapefile projection aligns with DEM projection
+    is_correctly_projected_clrh_lidar = (input_DEM_crs == clrh_gdf_projected_lidar.crs)         
+    
+    # Print results
+    print("Inside project_crs_subbasins_to_lidar(): Shapefile projection is aligned with DEM projection: ", 
+          is_correctly_projected_clrh_lidar)
+    print(f"Inside project_crs_subbasins_to_lidar(): The projected shapefile has been written to {state.CLRH_PROJ_LIDAR_FILE}.")
+    print("project_crs_subbasins_to_lidar() has ended.")
+
+    state.LAST_FUNCTION_RUN = "project_crs_subbasins_to_lidar"
+    save_state()
+
+    return clrh_gdf_projected_lidar, input_DEM_crs, input_DEM_crs_alnum, state.CLRH_PROJ_LIDAR_FILE
+
+
+
+##----------------------------------------------SPATIAL PROCESSING--------------------------------
+
+def extend_line(line_geom, extension_distance):
+    """Extend a LineString geometry by a given distance on both ends"""
+    if line_geom.geom_type != 'LineString':
+        return line_geom
+    
+    # Get the first and last coordinates
+    coords = list(line_geom.coords)
+    
+    if len(coords) < 2:
+        return line_geom
+    
+    # Calculate direction vectors
+    # For start extension
+    start_point = np.array(coords[0])
+    second_point = np.array(coords[1])
+    start_direction = start_point - second_point
+    start_direction_norm = start_direction / np.linalg.norm(start_direction)
+    new_start = start_point + start_direction_norm * extension_distance
+    
+    # For end extension  
+    end_point = np.array(coords[-1])
+    second_last_point = np.array(coords[-2])
+    end_direction = end_point - second_last_point
+    end_direction_norm = end_direction / np.linalg.norm(end_direction)
+    new_end = end_point + end_direction_norm * extension_distance
+    
+    # Create new coordinates list
+    new_coords = [tuple(new_start)] + coords + [tuple(new_end)]
+    
+    return LineString(new_coords)
 
 
 def clip_lidar_to_shapefile(projected_gdf,
@@ -351,8 +479,7 @@ def clip_nhn_to_watershed(nhn_filename,
 
     # Clipped NHN shapefile name with PATH
     state.NHN_CLIPPED_FILE = state.HYDROCON_INTERIM_PATH + \
-                        nhn_filename + \
-                        "_clip"
+                        nhn_filename
 
     # Clip NHN streams shapefile to watershed
     wbt.clip(
@@ -394,6 +521,54 @@ def clip_nhn_to_watershed(nhn_filename,
     save_state()
 
     return state.NHN_CLIPPED_PROJECTED_LIDAR_FILE
+
+def append_culvert_lines(channels_gdf, culvert_gdf):
+    """
+    Append culvert lines to the existing channels GeoDataFrame.
+
+    Returns:
+    GeoDataFrame: Combined GeoDataFrame with channels and culverts.
+    """
+
+
+    # 1. Set the gdf CRS to match that of the channels_gdf
+    if culvert_gdf.crs != channels_gdf.crs:
+        old_crs = culvert_gdf.crs
+        culvert_gdf = culvert_gdf.to_crs(channels_gdf.crs)
+        pwa.state.log = f"Reprojected culvert GDF from: {old_crs} to CRS: {culvert_gdf.crs}"
+
+    # 2. Extend all line segments in the resulting gdf by 2m in either direction
+    if culvert_gdf.crs.is_projected:
+        culvert_gdf['geometry'] = culvert_gdf['geometry'].apply(
+            lambda geom: extend_line(geom, 2.0)
+        )
+    else:
+        print("Warning: line extension feature requires a projected CRS. Skipping line extension for culvert geometries.")
+
+        pwa.state.log = f"Extended {len(culvert_gdf)} line segments by 2m on each end"
+
+    # 3. Append the geometries from the NHN file and the gdf file from step 2
+    # Extract geometries from both GeoDataFrames
+    channels_geometries = channels_gdf[['geometry']]
+    culvert_geometries = culvert_gdf[['geometry']]
+
+    # Combine both sets of geometries
+    burn_lines_gdf = pd.concat([channels_geometries, culvert_geometries], 
+                            ignore_index=True)
+
+    # Add a source column to track origin
+    burn_lines_gdf['source'] = ['NHN'] * len(channels_geometries) + ['Culvert'] * len(culvert_geometries)
+
+    # Save the combined burn lines to interim path
+    burn_lines_path = state.HYDROCON_INTERIM_PATH + "burn_lines.shp"
+    burn_lines_gdf.to_file(burn_lines_path)
+
+    state.log = f"Saved burn lines to: {burn_lines_path}. Contains {len(channels_geometries)} NHN geometries and {len(culvert_geometries)} culvert geometries."
+
+    state.LAST_FUNCTION_RUN = "append_culvert_lines"
+    save_state()
+
+    return burn_lines_gdf
 
 
 def gen_depressions_raster(lidar_filename,
@@ -650,96 +825,6 @@ def gen_wetland_polygons(depressions_raster_file):
 
     return state.WETLANDS_POLYGONS_SHAPEFILE, gdf
 
-
-def project_crs_subbasins_to_nhn(nhn_gdf, 
-                             subbasins_gdf,
-                             subbasins_filename):
-    print("Starting project_crs_subbasins_to_nhn()...")
-
-    # CRS for NHN shapefile
-    input_NHN_crs = nhn_gdf.crs
-
-
-    # Project subbasins data to match streams data
-    subbasins_gdf_projected_nhn = subbasins_gdf.to_crs(input_NHN_crs)
-
-
-    # Remove any non-alphanumeric characters from crs name
-    input_NHN_crs_alnum = ''.join(c for c in \
-                                str(input_NHN_crs) if c.isalnum())
-    if len(input_NHN_crs_alnum) > 10:
-        # truncate to first 10 characters to avoid errors due to long file names
-        input_NHN_crs_alnum = input_NHN_crs_alnum[:10]
-
-
-    # Projected subbasins shapefile name with path
-    state.SUBBASINS_PROJ_NHN_FILE = state.HYDROCON_INTERIM_PATH + \
-                            subbasins_filename + \
-                            f"_projected_{input_NHN_crs_alnum}" 
-
-
-    # Write projected subbasins data to shapefile
-    subbasins_gdf_projected_nhn.to_file(state.SUBBASINS_PROJ_NHN_FILE + \
-                                ".shp")
-
-
-    # Check if shapefile projection aligns with DEM projection
-    is_correctly_projected_clrh_nhn = (input_NHN_crs == subbasins_gdf_projected_nhn.crs)
-                            
-
-    # Print results
-    print("Inside project_subbasins_to_nhn(): Shapefile projection is aligned with NHN projection: ", 
-        is_correctly_projected_clrh_nhn)
-    print(f"Inside project_subbasins_to_nhn(): The projected shapefile has been written to {state.SUBBASINS_PROJ_NHN_FILE}.")
-    print("project_crs_subbasins_to_nhn() has ended.")
-
-    state.LAST_FUNCTION_RUN = "project_crs_subbasins_to_nhn"
-    save_state()
-
-    # Return projected subbasins shapefile
-    return subbasins_gdf_projected_nhn, state.SUBBASINS_PROJ_NHN_FILE
-
-
-def project_subbasins_to_lidar(gdf, gdf_filename,
-                                   lidar_filename, lidar_directory):
-    print("Starting project_crs_subbasins_to_lidar()...")
-                                       
-    with rasterio.open(lidar_directory + \
-                       lidar_filename + \
-                       ".tif") as src:
-        input_DEM_crs = src.crs
-    
-    # Project subbasins data to match DEM
-    clrh_gdf_projected_lidar = gdf.to_crs(input_DEM_crs)
-    
-    # Remove any non-alphanumeric characters from crs name
-    input_DEM_crs_alnum = ''.join(c for c in \
-                                  str(input_DEM_crs) if c.isalnum())
-    if len(input_DEM_crs_alnum) > 10:
-        # truncate to first 10 characters to avoid errors due to long file names
-        input_DEM_crs_alnum = input_DEM_crs_alnum[:10]  
-    
-    # Projected subbasins shapefile name with path
-    state.CLRH_PROJ_LIDAR_FILE = state.HYDROCON_INTERIM_PATH + \
-                            gdf_filename + \
-                            f"_projected_{input_DEM_crs_alnum}"
-    
-    # Write projected subbasins data to shapefile
-    clrh_gdf_projected_lidar.to_file(state.CLRH_PROJ_LIDAR_FILE + ".shp")
-    
-    # Check if shapefile projection aligns with DEM projection
-    is_correctly_projected_clrh_lidar = (input_DEM_crs == clrh_gdf_projected_lidar.crs)         
-    
-    # Print results
-    print("Inside project_crs_subbasins_to_lidar(): Shapefile projection is aligned with DEM projection: ", 
-          is_correctly_projected_clrh_lidar)
-    print(f"Inside project_crs_subbasins_to_lidar(): The projected shapefile has been written to {state.CLRH_PROJ_LIDAR_FILE}.")
-    print("project_crs_subbasins_to_lidar() has ended.")
-
-    state.LAST_FUNCTION_RUN = "project_crs_subbasins_to_lidar"
-    save_state()
-
-    return clrh_gdf_projected_lidar, input_DEM_crs, input_DEM_crs_alnum, state.CLRH_PROJ_LIDAR_FILE
 
 
 def merge_rasters(lidar_files, gdf):
