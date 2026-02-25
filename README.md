@@ -1,6 +1,15 @@
 # PWA-hydro-conditioning-tools
 Python module for hydro conditioning Prairie watersheds.
 
+## For developers
+
+This package is built for use in the PWA-hydro-conditioning-main product repository and the PWA developer repository. Updates to functions in this package must be tested for backwards compatibility with PWA-hydro-conditioning-main before being merged.
+
+### Branches
+
+- **main** : branch used only for tested publishable code
+- **dev** : branch used for development and testing
+
 ### Versioning Note
 Versions follow the Semver convention:
 - Patch x.x.Y. - bug fix, no interface change (Not currently tracked)
@@ -8,6 +17,16 @@ Versions follow the Semver convention:
 - Major Y.x.x. - breaking change to the public interface
 
 Process note: Major or minor commits to this repo should be tested for compatibility with PWA dependencies
+
+### Developer Steps
+
+1. Make sure local versions of PWA, -main and -tools repos are up to date and dev branch is up to date with main.
+2. Use setup functions and pwa.save_state() for developing major adjustments to main workflow (to avoid rerunning entire workflow during dev & testing). Patches can be developed directly in a debugging mode.
+3. If making several different improvements, run steps below in separate series:
+4. Using dev branch, add functions to package (-tools) and insert them in the workflow (-main). Best practice is to do this separately for each repository using your IDE.
+5. Re-install the package (-tools) using pip install -e . and test the hydro_condition.py file
+6. If successful, update version info in pyproject.toml and merge dev branch to main
+
 
 ### Repository Structure
 ```bash
