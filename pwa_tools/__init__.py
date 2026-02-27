@@ -1095,11 +1095,11 @@ def merge_rasters(lidar_files, gdf):
 
 
     # Rename lidar filename variable
-    LIDAR_FILENAME_NEW = LIDAR_FILENAME_NEW + "_filled"
+    state.LIDAR_FILENAME_NEW = state.LIDAR_FILENAME_NEW + "_filled"
 
     print("Inside merge_rasters(): The gaps have been filled.")
     print("merge_rasters() has ended.")
-    return LIDAR_FILENAME_NEW
+    return state.LIDAR_FILENAME_NEW
                   
 
 #--------------------RECOVERY FUNCTIONS------------------------
