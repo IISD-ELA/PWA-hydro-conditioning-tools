@@ -203,7 +203,7 @@ def set_directory_structure(default_watershed = "cypress_river", data_dir = None
     return state.__dict__
 
 
-def project_setup(watershed_default = "cypress_river", delineation_default = "finalcat_info_v1-0", lidar_default = "Pembina_LiDAR_DEM", channels_default = "NHN_05MH000_3_0_HD_SLWATER_1", culvert_default = "", crs_default = "EPSG:32616", data_dir = None, recovery_mode = False):
+def project_setup(watershed_default = "cypress_river", delineation_default = "finalcat_info_v1-0", lidar_default = "Pembina_LiDAR_DEM", channels_default = "NHN_05MH000_3_0_HD_SLWATER_1", culvert_default = "", crs_default = "EPSG:3158", data_dir = None, recovery_mode = False):
     
     
     # Organize data folders and files and store relevant directory information in a dictionary
