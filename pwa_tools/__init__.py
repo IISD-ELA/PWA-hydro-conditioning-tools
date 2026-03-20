@@ -459,26 +459,29 @@ def clip_lidar_to_shapefile(projected_gdf,
 def clip_nhn_to_watershed(nhn_filename, 
                           clrh_proj_nhn_file,
                           input_DEM_crs,
-                          input_DEM_crs_alnum):
+                          input_DEM_crs_alnum, 
+                          culvert_filename = ''):
     
     print("Starting clip_nhn_to_watershed()...")
 
 
-    # Get path to the folder where THIS file lives (required to access WhiteboxTools)
+    # # Get path to the folder where THIS file lives (required to access WhiteboxTools)
     this_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Save working directory so we can return to it later
+    # # Save working directory so we can return to it later
     original_dir = os.getcwd()
 
-    # Initialize whitebox tools object
+    # # Initialize whitebox tools object
     wbt = WhiteboxTools()
 
-    # Set whitebox directory
+    # # Set whitebox directory
     wbt_dir = os.path.join(this_dir, "WBT")
+    
     wbt.set_whitebox_dir(wbt_dir)
 
+    
     # Clipped NHN shapefile name with PATH
-    state.NHN_CLIPPED_FILE = state.HYDROCON_INTERIM_PATH + \
+    state.NHN_CLIPPED_FILE = state.HYDROCON_RAW_PATH + \
                         nhn_filename
 
     # Clip NHN streams shapefile to watershed
@@ -494,10 +497,20 @@ def clip_nhn_to_watershed(nhn_filename,
     # Load NHN streams shapefile
     nhn_gdf_clip = gpd.read_file(state.NHN_CLIPPED_FILE + \
                                 ".shp")
+    
+    # If a culvert shapefile is provided, read it in and append culvert lines to the clipped NHN gdf
+    if len(culvert_filename) > 0:
+        culvert_gdf = read_shapefile(filename=culvert_filename, 
+                                          directory=state.HYDROCON_RAW_PATH)
+        
+        burn_lines_gdf = append_culvert_lines(channels_gdf=nhn_gdf_clip, culvert_gdf=culvert_gdf) ## Requires adding culverts to the initial set-up
+
+    else:
+        burn_lines_gdf = nhn_gdf_clip
 
 
     # Project clipped NHN shapefile to match DEM
-    nhn_gdf_clip_projected_lidar = nhn_gdf_clip.to_crs(input_DEM_crs)
+    burn_lines_projected_lidar = burn_lines_gdf.to_crs(input_DEM_crs)
 
     # Clipped and projected NHN shapefile name with path
     state.NHN_CLIPPED_PROJECTED_LIDAR_FILE = state.HYDROCON_INTERIM_PATH + \
@@ -505,11 +518,11 @@ def clip_nhn_to_watershed(nhn_filename,
                                         f"_clip_projected_{input_DEM_crs_alnum}"
 
     # Write clipped and projected NHN shapefile
-    nhn_gdf_clip_projected_lidar.to_file(state.NHN_CLIPPED_PROJECTED_LIDAR_FILE + \
+    burn_lines_projected_lidar.to_file(state.NHN_CLIPPED_PROJECTED_LIDAR_FILE + \
                                         ".shp")
 
     # Check if shapefile projection aligns with DEM projection
-    is_correctly_projected_nhn_lidar = (input_DEM_crs == nhn_gdf_clip_projected_lidar.crs)
+    is_correctly_projected_nhn_lidar = (input_DEM_crs == burn_lines_projected_lidar.crs)
 
     # Print results
     print("Inside clip_nhn_to_watershed(): NHN shapefile projection is aligned with DEM projection: ", 
@@ -535,7 +548,7 @@ def append_culvert_lines(channels_gdf, culvert_gdf):
     if culvert_gdf.crs != channels_gdf.crs:
         old_crs = culvert_gdf.crs
         culvert_gdf = culvert_gdf.to_crs(channels_gdf.crs)
-        pwa.state.log = f"Reprojected culvert GDF from: {old_crs} to CRS: {culvert_gdf.crs}"
+        state.log = f"Reprojected culvert GDF from: {old_crs} to CRS: {culvert_gdf.crs}"
 
     # 2. Extend all line segments in the resulting gdf by 2m in either direction
     if culvert_gdf.crs.is_projected:
@@ -545,7 +558,7 @@ def append_culvert_lines(channels_gdf, culvert_gdf):
     else:
         print("Warning: line extension feature requires a projected CRS. Skipping line extension for culvert geometries.")
 
-        pwa.state.log = f"Extended {len(culvert_gdf)} line segments by 2m on each end"
+        state.log = f"Extended {len(culvert_gdf)} line segments by 2m on each end"
 
     # 3. Append the geometries from the NHN file and the gdf file from step 2
     # Extract geometries from both GeoDataFrames
