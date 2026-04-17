@@ -1,0 +1,193 @@
+{
+  "files": {
+    "step0_processed": {
+      "HydroConditioning/Processed/CLRH_basins_depression_depths.cpg": {
+        "sha256": "3ad3031f5503a4404af825262ee8232cc04d4ea6683d42c5dd0a2f2a27ac9824",
+        "size_bytes": 5
+      },
+      "HydroConditioning/Processed/CLRH_basins_depression_depths.dbf": {
+        "sha256": "5b5ae7f8173198fd258732ae5008ea84e523b35ae5c41c4b4e429e9c2c4c3675",
+        "size_bytes": 76001
+      },
+      "HydroConditioning/Processed/CLRH_basins_depression_depths.prj": {
+        "sha256": "583816e965268adb3873d2a7c27383a8d62ecdcc180f2cd62433aebbcd92a4ce",
+        "size_bytes": 439
+      },
+      "HydroConditioning/Processed/CLRH_basins_depression_depths.shp": {
+        "sha256": "24308988972ff943828af7e3055b70fa3f2ef1e4725d06ddf6abfd5b8d262449",
+        "size_bytes": 348064
+      },
+      "HydroConditioning/Processed/CLRH_basins_depression_depths.shx": {
+        "sha256": "962217db8f128dc24e319a82e0f38e8ffe36ddaa3e662d4c0643fc9a5090dbc3",
+        "size_bytes": 604
+      },
+      "HydroConditioning/Processed/ZonalStats_grassmere.html": {
+        "sha256": "1c55a186a169de1f95e95f92afd64d41575165008bc70ff1bb66a2d0bfe6cc1f",
+        "size_bytes": 33110
+      },
+      "HydroConditioning/Processed/aspect_ratios.csv": {
+        "sha256": "0789484300269c381e6e9a7d6f650cc5c04eedfca61c7d915455f88f2a2f7539",
+        "size_bytes": 1890
+      },
+      "HydroConditioning/Processed/merged_average_dem_filled_clip_resample_5m_FillBurn_Deps_Corr.tif": {
+        "sha256": "da3e59e361274f1a55ef0ef8cc5a994dd145b28c3596274284ebfdef0cfddbce",
+        "size_bytes": 218344679
+      }
+    },
+    "step12_processed": {
+      "Raven/Processed/GridWeights.txt": {
+        "sha256": "258e8b4b8504555d16c6d3cf42351d796358d5e4840c7199405db808cea0e9da",
+        "size_bytes": 2479
+      },
+      "Raven/Processed/channel_properties.rvp": {
+        "sha256": "6e9a23561cde09071b1f4122f50503efdf78521b5aa7366ae0af231bd81fd615",
+        "size_bytes": 42075
+      },
+      "Raven/Processed/channel_properties.rvp.tpl": {
+        "sha256": "6e9a23561cde09071b1f4122f50503efdf78521b5aa7366ae0af231bd81fd615",
+        "size_bytes": 42075
+      },
+      "Raven/Processed/grassmere.rvc": {
+        "sha256": "f9d180d6c11fdd58a2a8d4541cfd2746677ac4951e3e30ee29a6a2afe42913ae",
+        "size_bytes": 256
+      },
+      "Raven/Processed/grassmere.rvh": {
+        "sha256": "2076fdc026d793526c0d6406f14ea8be9d1853ae18fa19b3f7f39cb6747b7ade",
+        "size_bytes": 24674
+      },
+      "Raven/Processed/grassmere.rvh.tpl": {
+        "sha256": "7a6141f5a0a34daa334ad0b4b53cbf55b9a0b57c421daed51b9a97125623b9c8",
+        "size_bytes": 27063
+      },
+      "Raven/Processed/grassmere.rvi": {
+        "sha256": "f40eb8a82e78a53fe32932ff4fc3bda9d52b8c6635ceb0b63833a5d383fdb3c0",
+        "size_bytes": 2863
+      },
+      "Raven/Processed/grassmere.rvp": {
+        "sha256": "a5866ef86277eea2d1ee0f90da4ffb8400f1e689637859040982e632b29daa8f",
+        "size_bytes": 8403
+      },
+      "Raven/Processed/grassmere.rvp.tpl": {
+        "sha256": "13570adf1c460ad663ffe6a334325288f159a252c91a2f7da363c2efea72c042",
+        "size_bytes": 7892
+      },
+      "Raven/Processed/grassmere.rvt": {
+        "sha256": "7608f17fad2758767835094f10b36e9e0c6a494aacb73a5e59e87fb881f62f61",
+        "size_bytes": 931
+      },
+      "Raven/Processed/grassmere_HRU_areas.csv": {
+        "sha256": "cf729caa1c764b3143953869c8ebc942401e9d5c8ab19a5d38a252bcda62eca8",
+        "size_bytes": 1143
+      },
+      "Raven/Processed/grassmere_tp_tc.csv": {
+        "sha256": "9e5d755f4073c5528a725f11ad1c3eb03cf03e6b5cb1717ff1dacff8fe322f7c",
+        "size_bytes": 1410
+      }
+    }
+  },
+  "generated_at": "2026-04-16",
+  "samples": {
+    "aspect_ratios": {
+      "aspect_ratio": {
+        "max": 5.292574227409765,
+        "mean": 1.8478570851740934,
+        "min": 1.011977042269247
+      },
+      "columns": [
+        "SubId",
+        "Aspect_Ratio"
+      ],
+      "n_rows": 63
+    },
+    "depression_depths": {
+      "columns": [
+        "BasArea",
+        "BasAspect",
+        "BasSlope",
+        "BkfDepth",
+        "BkfWidth",
+        "Ch_n",
+        "DA_Chn_L",
+        "DA_Chn_Slp",
+        "DA_Slope",
+        "Deps_Depth",
+        "Deps_Vol_m",
+        "DowSubId",
+        "DrainArea",
+        "FloodP_n",
+        "Has_POI",
+        "HyLakeId",
+        "LakeArea",
+        "LakeDepth",
+        "LakeVol",
+        "Lake_Cat",
+        "Laketype",
+        "Max_DEM",
+        "MeanElev",
+        "Min_DEM",
+        "Obs_NM",
+        "Q_Mean",
+        "RivLength",
+        "RivSlope",
+        "SDA_NM",
+        "SRC_obs",
+        "SSDA_NM",
+        "Seg_ID",
+        "Seg_order",
+        "Strahler",
+        "SubId",
+        "c",
+        "centroid_x",
+        "centroid_y",
+        "geometry",
+        "k",
+        "outletLat",
+        "outletLng"
+      ],
+      "deps_depth_mm": {
+        "first_5": [
+          19.0,
+          28.5,
+          28.8,
+          94.8,
+          64.5
+        ],
+        "max": 319.0,
+        "mean": 68.16507936507936,
+        "median": 47.4,
+        "min": 12.5,
+        "std": 59.82236381566345
+      },
+      "deps_vol_m3": {
+        "max": 3565381050.0,
+        "mean": 499379214.28571427,
+        "median": 299160810.0,
+        "min": 1346400.0000000002
+      },
+      "n_features": 63
+    },
+    "depression_raster": {
+      "crs": "EPSG:3158",
+      "height": 7705,
+      "nodata": -32768.0,
+      "values": {
+        "max": 68.23191833496094,
+        "mean": 0.059792801122292884,
+        "min": 0.0,
+        "n_nonzero": 5904520
+      },
+      "width": 7083
+    },
+    "grid_weights": {
+      "first_3_lines": [
+        "# ----------------------------------------------",
+        "# Raven Input file",
+        "# grassmere"
+      ],
+      "n_lines": 76
+    }
+  },
+  "schema_version": 1,
+  "source_data_dir_relative": "data",
+  "watershed": "grassmere"
+}
