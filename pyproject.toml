@@ -10,5 +10,23 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = []
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-cov>=4",
+]
+
 [tool.setuptools]
 packages = ["pwa_tools"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+markers = [
+    "regression: end-to-end tests requiring real watershed data (skipped by default in dev)",
+    "integration: tests that exercise external binaries (Raven, WhiteboxTools, gdal)",
+]
