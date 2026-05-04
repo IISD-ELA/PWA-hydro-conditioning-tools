@@ -144,3 +144,39 @@ class PwaConfig:
         with open(config_path) as f:
             data = yaml.safe_load(f)
         return cls.from_dict(data)
+
+    def expected_input_files(self) -> list[Path]:
+        """Paths the pipeline expects to find on disk before run_step0 starts.
+
+        Returns the resolved paths to the CLRH shapefile, every LiDAR raster,
+        the NHN shapefile, and (if specified) the culvert shapefile. Sidecars
+        like ``.dbf``/``.shx`` are not enumerated — geopandas will fail with a
+        clear error if they're missing alongside a present ``.shp``.
+        """
+        raw = self.paths.hydrocon_raw
+        files: list[Path] = []
+        files.append(raw / f"{self.inputs.clrh_filename}.shp")
+        for name in self.inputs.lidar_filenames:
+            files.append(raw / f"{name}.tif")
+        files.append(raw / f"{self.inputs.nhn_filename}.shp")
+        if self.inputs.culvert_filename:
+            files.append(raw / f"{self.inputs.culvert_filename}.shp")
+        return files
+
+    def validate_inputs_exist(self) -> None:
+        """Fail fast if expected input files are missing.
+
+        Checks every path returned by :meth:`expected_input_files`. Raises
+        :class:`FileNotFoundError` listing all missing paths in one message
+        rather than failing on the first one — saves the user three round
+        trips when their input directory is partially populated.
+        """
+        missing = [p for p in self.expected_input_files() if not p.is_file()]
+        if missing:
+            bullet_list = "\n  - ".join(str(p) for p in missing)
+            raise FileNotFoundError(
+                "Step 0 cannot start; the following expected input files are "
+                f"missing:\n  - {bullet_list}\n"
+                f"Place them in {self.paths.hydrocon_raw} (or fix the "
+                "filenames in your config) and re-run."
+            )

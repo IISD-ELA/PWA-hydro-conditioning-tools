@@ -186,3 +186,73 @@ def test_config_is_frozen(tmp_path: Path) -> None:
     config = PwaConfig.from_dict(_config_dict(tmp_path))
     with pytest.raises(Exception):  # FrozenInstanceError
         config.watershed_name = "renamed"  # type: ignore[misc]
+
+
+# ============ Input-file validation ============
+
+
+def _stage_inputs(config: PwaConfig, *, omit: tuple[str, ...] = ()) -> None:
+    """Create empty placeholder files for every expected input.
+
+    Pass *omit* names (basenames without extension) to skip particular files
+    so we can assert validate_inputs_exist raises for missing ones.
+    """
+    config.paths.make_dirs()
+    for path in config.expected_input_files():
+        if path.stem in omit:
+            continue
+        path.touch()
+
+
+def test_expected_input_files_lists_all(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    files = config.expected_input_files()
+    raw = config.paths.hydrocon_raw
+    assert raw / "finalcat_info_v1-0.shp" in files
+    assert raw / "Pembina_LiDAR_DEM.tif" in files
+    assert raw / "NHN_05MH000_3_0_HD_SLWATER_1.shp" in files
+    # No culvert filename → no culvert path
+    assert all("culvert" not in str(p).lower() for p in files)
+
+
+def test_expected_input_files_includes_culvert_when_set(tmp_path: Path) -> None:
+    data = _config_dict(tmp_path)
+    data["inputs"]["culvert_filename"] = "my_culverts"
+    config = PwaConfig.from_dict(data)
+    files = config.expected_input_files()
+    assert config.paths.hydrocon_raw / "my_culverts.shp" in files
+
+
+def test_expected_input_files_lists_every_lidar_in_multi_raster_mode(tmp_path: Path) -> None:
+    data = _config_dict(tmp_path)
+    data["inputs"]["lidar_filenames"] = ["tile_a", "tile_b", "tile_c"]
+    config = PwaConfig.from_dict(data)
+    files = config.expected_input_files()
+    assert config.paths.hydrocon_raw / "tile_a.tif" in files
+    assert config.paths.hydrocon_raw / "tile_b.tif" in files
+    assert config.paths.hydrocon_raw / "tile_c.tif" in files
+
+
+def test_validate_inputs_exist_passes_when_all_present(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    _stage_inputs(config)
+    config.validate_inputs_exist()  # should not raise
+
+
+def test_validate_inputs_exist_raises_listing_all_missing(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    _stage_inputs(config, omit=("finalcat_info_v1-0", "Pembina_LiDAR_DEM"))
+    with pytest.raises(FileNotFoundError) as exc_info:
+        config.validate_inputs_exist()
+    msg = str(exc_info.value)
+    assert "finalcat_info_v1-0.shp" in msg
+    assert "Pembina_LiDAR_DEM.tif" in msg
+    # NHN was staged → not in the missing list
+    assert "NHN_05MH000_3_0_HD_SLWATER_1.shp" not in msg
+
+
+def test_validate_inputs_exist_raises_when_directory_absent(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    # Don't make_dirs — the entire raw directory is absent.
+    with pytest.raises(FileNotFoundError, match="missing"):
+        config.validate_inputs_exist()
