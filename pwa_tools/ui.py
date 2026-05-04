@@ -47,8 +47,16 @@ def _prompt_filename(description: str, default: str | None = None) -> str | list
     filename = input(prompt)
 
     if "LiDAR" in description and "," in filename:
-        filenames = [f.strip() for f in filename.split(",")]
-        return filenames if filenames else (default if default else filenames)
+        filenames = [f.strip() for f in filename.split(",") if f.strip()]
+        # BUG-010 fix: original `filenames if filenames` was truthy even
+        # for ["", "", ""]. Filter empty entries out and re-check.
+        if filenames:
+            return filenames
+        if default is not None:
+            print(f"No {description} provided. Default applied ('{default}').")
+            return default
+        # Fall through to the single-file prompt loop below.
+        filename = ""
 
     filename = filename.strip()
     if "." in filename:
