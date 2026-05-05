@@ -256,3 +256,59 @@ def test_validate_inputs_exist_raises_when_directory_absent(tmp_path: Path) -> N
     # Don't make_dirs — the entire raw directory is absent.
     with pytest.raises(FileNotFoundError, match="missing"):
         config.validate_inputs_exist()
+
+
+# ============ to_dict / to_yaml round-trip ============
+
+
+def test_to_dict_round_trip(tmp_path: Path) -> None:
+    original = PwaConfig.from_dict(_config_dict(tmp_path))
+    rebuilt = PwaConfig.from_dict(original.to_dict())
+    assert rebuilt == original
+
+
+def test_to_dict_with_culvert_round_trip(tmp_path: Path) -> None:
+    data = _config_dict(tmp_path)
+    data["inputs"]["culvert_filename"] = "my_culverts"
+    original = PwaConfig.from_dict(data)
+    rebuilt = PwaConfig.from_dict(original.to_dict())
+    assert rebuilt == original
+    assert rebuilt.inputs.culvert_filename == "my_culverts"
+
+
+def test_to_dict_with_multiple_lidar_round_trip(tmp_path: Path) -> None:
+    data = _config_dict(tmp_path)
+    data["inputs"]["lidar_filenames"] = ["tile_a", "tile_b"]
+    original = PwaConfig.from_dict(data)
+    rebuilt = PwaConfig.from_dict(original.to_dict())
+    assert rebuilt == original
+    assert rebuilt.inputs.multiple_lidar_rasters is True
+
+
+def test_to_yaml_writes_human_readable_file(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    out = tmp_path / "out" / "pwa_config.yml"
+    written = config.to_yaml(out)
+    assert written == out
+    assert out.is_file()
+    text = out.read_text()
+    # Block style, key order preserved (watershed_name first).
+    assert text.startswith("watershed_name:")
+    assert "lidar_filenames:\n- " in text or "lidar_filenames:\n  - " in text
+    # No python tags.
+    assert "!!python" not in text
+
+
+def test_to_yaml_round_trip(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    out = tmp_path / "pwa_config.yml"
+    config.to_yaml(out)
+    rebuilt = PwaConfig.from_yaml(out)
+    assert rebuilt == config
+
+
+def test_to_yaml_creates_parent_dir(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    out = tmp_path / "deeply" / "nested" / "pwa_config.yml"
+    config.to_yaml(out)
+    assert out.is_file()

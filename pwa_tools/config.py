@@ -180,3 +180,43 @@ class PwaConfig:
                 f"Place them in {self.paths.hydrocon_raw} (or fix the "
                 "filenames in your config) and re-run."
             )
+
+    def to_dict(self) -> dict:
+        """Serialize back to the same dict shape :meth:`from_dict` consumes.
+
+        Round-trip property: ``PwaConfig.from_dict(c.to_dict()) == c`` (with
+        the caveat that ``base_data_dir`` is reconstructed from
+        ``paths.base_data``, so the watershed-name suffix is stripped from
+        the path tail consistently with ``from_dict``'s expectation).
+        """
+        return {
+            "watershed_name": self.watershed_name,
+            "base_data_dir": str(self.paths.base_data),
+            "inputs": {
+                "clrh_filename": self.inputs.clrh_filename,
+                "lidar_filenames": list(self.inputs.lidar_filenames),
+                "nhn_filename": self.inputs.nhn_filename,
+                "culvert_filename": self.inputs.culvert_filename,
+                "crs_string": self.inputs.crs_string,
+            },
+        }
+
+    def to_yaml(self, path: Path | str) -> Path:
+        """Write this config to *path* as YAML. Returns the resolved path.
+
+        Output is human-readable: keys preserved in insertion order, lists
+        rendered block-style (``- name``), no Python tags. Parent directory
+        is created if needed.
+        """
+        import yaml  # local import keeps module-level deps light
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            yaml.safe_dump(
+                self.to_dict(),
+                sort_keys=False,
+                default_flow_style=False,
+            )
+        )
+        return path
