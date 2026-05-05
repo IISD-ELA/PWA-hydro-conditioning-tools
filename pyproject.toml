@@ -43,4 +43,5 @@ addopts = [
 markers = [
     "regression: end-to-end tests requiring real watershed data (skipped by default in dev)",
     "integration: tests that exercise external binaries (Raven, WhiteboxTools, gdal)",
+    "slow: tests taking more than ~30 seconds (typically WBT or full-pipeline runs)",
 ]
