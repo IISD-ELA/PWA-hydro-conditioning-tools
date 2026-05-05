@@ -24,27 +24,44 @@ This module centralizes that into one context manager with proper cleanup.
 from __future__ import annotations
 
 import os
+import platform
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
+
+
+def _bundled_binary_exists() -> bool:
+    """True iff the bundled pwa_tools/WBT/ has a binary for the current OS.
+
+    The bundled directory ships with ``whitebox_tools.exe`` (Windows only).
+    On macOS/Linux the wrapper is importable but invoking it crashes with
+    ``./whitebox_tools: not found`` because the binary is absent.
+    """
+    wbt_dir = Path(__file__).resolve().parent / "WBT"
+    if not wbt_dir.is_dir():
+        return False
+    binary_name = "whitebox_tools.exe" if platform.system() == "Windows" else "whitebox_tools"
+    return (wbt_dir / binary_name).is_file()
 
 
 def _get_wbt_class():
     """Import WhiteboxTools from the best available source.
 
     Priority:
-      1. Bundled ``pwa_tools/WBT/whitebox_tools.py`` (existing vendor, Windows binaries)
-      2. ``whitebox`` pip package (cross-platform, auto-downloads correct binary)
-      3. Raise with clear install instructions
+      1. Bundled ``pwa_tools/WBT/whitebox_tools.py`` (only when the bundled
+         directory has a binary for the current OS — historically Windows-only).
+      2. ``whitebox`` pip package (cross-platform, auto-downloads correct binary).
+      3. Raise with clear install instructions.
 
     The bundled and pip versions share the same upstream codebase (Dr. John
     Lindsay, MIT license) and expose the same ``run_tool`` API.
     """
-    try:
-        from .WBT.whitebox_tools import WhiteboxTools
-        return WhiteboxTools
-    except (ImportError, OSError):
-        pass
+    if _bundled_binary_exists():
+        try:
+            from .WBT.whitebox_tools import WhiteboxTools
+            return WhiteboxTools
+        except (ImportError, OSError):
+            pass
 
     try:
         from whitebox import WhiteboxTools  # type: ignore[import-untyped]
@@ -111,13 +128,13 @@ def wbt_session() -> Generator:
         WBTClass = _get_wbt_class()
         wbt = WBTClass()
 
-        # Point WBT at the bundled binary directory when using the bundled version.
-        # The pip-installed whitebox package manages its own binary location, so
-        # set_whitebox_dir is only needed for the vendor path.
-        this_dir = Path(__file__).resolve().parent
-        wbt_dir = this_dir / "WBT"
-        if wbt_dir.is_dir():
-            wbt.set_whitebox_dir(str(wbt_dir))
+        # Only point WBT at the bundled binary directory when that
+        # directory actually has a binary for the current OS. Otherwise
+        # we'd misdirect the pip-installed whitebox to a Windows-only
+        # bundle and crash with "./whitebox_tools: not found".
+        if _bundled_binary_exists():
+            this_dir = Path(__file__).resolve().parent
+            wbt.set_whitebox_dir(str(this_dir / "WBT"))
 
         yield wbt
     finally:
