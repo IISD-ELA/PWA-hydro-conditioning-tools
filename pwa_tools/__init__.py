@@ -43,11 +43,6 @@ from collections import defaultdict
 from osgeo import gdal
 
 
-# Visualization
-import matplotlib.pyplot as plt
-import rasterio.plot
-
-
 # Whitebox
 try:
     from .WBT.whitebox_tools import WhiteboxTools  
