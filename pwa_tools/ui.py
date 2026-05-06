@@ -11,6 +11,7 @@ god file.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -128,7 +129,7 @@ def prompt_for_config(
     lidar_filenames = lidar if isinstance(lidar, list) else [lidar]
     culvert_filename = culvert if culvert else None
 
-    return PwaConfig.from_dict({
+    config = PwaConfig.from_dict({
         "watershed_name": watershed_name,
         "base_data_dir": str(base_data_dir),
         "inputs": {
@@ -139,3 +140,31 @@ def prompt_for_config(
             "culvert_filename": culvert_filename,
         },
     })
+
+    _warn_on_missing_inputs(config)
+    return config
+
+
+def _warn_on_missing_inputs(config: PwaConfig) -> None:
+    """Print a non-blocking warning to stderr if any of the named inputs
+    don't exist on disk.
+
+    Catches the common case where the user typed a watershed name that
+    doesn't match the on-disk directory (e.g. snake_case normalization
+    silently turning ``Grassmere-test-run`` into ``grassmere_test_run``).
+    Doesn't refuse to write the config — staging data after generating
+    the YAML is a legitimate workflow.
+    """
+    missing = [p for p in config.expected_input_files() if not p.is_file()]
+    if not missing:
+        return
+    print(
+        "\nHeads-up: the following input files don't exist yet at the path "
+        "your config points to. If you're staging data later, ignore this. "
+        "Otherwise check for typos in your watershed name or filenames "
+        "(note: watershed names are normalized — spaces and hyphens become "
+        "underscores).",
+        file=sys.stderr,
+    )
+    for path in missing:
+        print(f"  - {path}", file=sys.stderr)

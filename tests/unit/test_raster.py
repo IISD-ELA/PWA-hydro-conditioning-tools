@@ -80,6 +80,18 @@ def test_resample_calls_gdalwarp_with_check(tmp_path: Path) -> None:
         assert args[1]["check"] is True  # the fix for the missing check
 
 
+def test_resample_passes_overwrite_flag(tmp_path: Path) -> None:
+    """gdalwarp refuses to overwrite by default; the -overwrite flag is what
+    lets re-runs of a partially-completed pipeline succeed instead of
+    crashing on stale Interim/ outputs."""
+    raster = _write_synthetic_raster(tmp_path / "dem.tif")
+
+    with patch("pwa_tools.io.raster.subprocess.run") as mock_run:
+        resample_lidar_raster(raster, resolution_m=5)
+        cmd = mock_run.call_args[0][0]
+        assert "-overwrite" in cmd
+
+
 def test_resample_output_path_includes_resolution(tmp_path: Path) -> None:
     raster = _write_synthetic_raster(tmp_path / "dem.tif")
 

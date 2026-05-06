@@ -258,6 +258,58 @@ def test_validate_inputs_exist_raises_when_directory_absent(tmp_path: Path) -> N
         config.validate_inputs_exist()
 
 
+def test_validate_inputs_exist_lists_sibling_watersheds_when_dir_missing(
+    tmp_path: Path,
+) -> None:
+    """When the watershed dir is absent, surface the siblings present in
+    base_data_dir so case/spelling mismatches are obvious to the user."""
+    # Stage a couple of unrelated sibling directories
+    (tmp_path / "Grassmere-test-run").mkdir()  # the user's actual on-disk name
+    (tmp_path / "manning_canal").mkdir()
+    (tmp_path / "some_file.txt").touch()  # not a directory — should be filtered out
+
+    config = PwaConfig.from_dict(_config_dict(tmp_path))  # watershed_name=cypress_river
+    with pytest.raises(FileNotFoundError) as exc_info:
+        config.validate_inputs_exist()
+
+    msg = str(exc_info.value)
+    assert "Grassmere-test-run" in msg
+    assert "manning_canal" in msg
+    assert "some_file.txt" not in msg  # files filtered out, only dirs listed
+    # The original missing-path is still surfaced
+    assert "cypress_river" in msg
+
+
+def test_validate_inputs_exist_handles_missing_base_data_dir(tmp_path: Path) -> None:
+    """If base_data_dir itself doesn't exist, fail without crashing on the
+    sibling-listing code."""
+    nonexistent = tmp_path / "does_not_exist"
+    config = PwaConfig.from_dict(
+        _config_dict(tmp_path, base_data_dir=str(nonexistent))
+    )
+    with pytest.raises(FileNotFoundError) as exc_info:
+        config.validate_inputs_exist()
+    # Should mention the base_data_dir issue, not crash with a different error
+    msg = str(exc_info.value)
+    assert "missing" in msg or "does not exist" in msg.lower()
+
+
+def test_validate_inputs_exist_per_file_message_unchanged_when_dir_present(
+    tmp_path: Path,
+) -> None:
+    """When the Raw/ dir does exist, keep the original per-file error format —
+    don't switch to the sibling-listing branch."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    config.paths.make_dirs()  # Raw/ exists, but no input files inside
+    with pytest.raises(FileNotFoundError) as exc_info:
+        config.validate_inputs_exist()
+    msg = str(exc_info.value)
+    # Per-file format mentions specific filenames
+    assert "finalcat_info_v1-0.shp" in msg
+    # And does NOT include the sibling-listing header
+    assert "Available directories" not in msg
+
+
 # ============ to_dict / to_yaml round-trip ============
 
 

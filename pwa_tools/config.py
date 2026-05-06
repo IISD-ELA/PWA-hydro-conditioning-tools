@@ -166,18 +166,46 @@ class PwaConfig:
     def validate_inputs_exist(self) -> None:
         """Fail fast if expected input files are missing.
 
-        Checks every path returned by :meth:`expected_input_files`. Raises
-        :class:`FileNotFoundError` listing all missing paths in one message
-        rather than failing on the first one — saves the user three round
-        trips when their input directory is partially populated.
+        Two branches: if the entire watershed Raw/ directory is absent
+        (the typical "watershed_name typo" case), surface sibling
+        directories under base_data_dir so the user can spot a case or
+        spelling mismatch at a glance. Otherwise, list the specific
+        missing files individually.
         """
+        raw = self.paths.hydrocon_raw
+        if not raw.is_dir():
+            siblings = []
+            base = self.paths.base_data
+            if base.is_dir():
+                siblings = sorted(p.name for p in base.iterdir() if p.is_dir())
+
+            msg = (
+                "Step 0 cannot start; the watershed input directory is "
+                f"missing:\n  {raw}\n"
+            )
+            if siblings:
+                sibling_list = "\n  - ".join(siblings)
+                msg += (
+                    f"\nAvailable directories in {base}:\n"
+                    f"  - {sibling_list}\n"
+                    "\nIf one of these is the watershed you meant, either "
+                    "update 'watershed_name' in your config or rename the "
+                    "on-disk directory to match."
+                )
+            else:
+                msg += (
+                    f"\nThe parent directory {base} doesn't exist or has no "
+                    "subdirectories. Check 'base_data_dir' in your config."
+                )
+            raise FileNotFoundError(msg)
+
         missing = [p for p in self.expected_input_files() if not p.is_file()]
         if missing:
             bullet_list = "\n  - ".join(str(p) for p in missing)
             raise FileNotFoundError(
                 "Step 0 cannot start; the following expected input files are "
                 f"missing:\n  - {bullet_list}\n"
-                f"Place them in {self.paths.hydrocon_raw} (or fix the "
+                f"Place them in {raw} (or fix the "
                 "filenames in your config) and re-run."
             )
 

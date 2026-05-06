@@ -19,11 +19,10 @@ dependencies = [
     "html5lib>=1.1",
     "lxml>=4.9",
     "pyyaml>=6.0",
+    "whitebox>=2.3.0",
 ]
 # GDAL (osgeo) is required for merge_rasters but cannot be pip-installed.
 # Install via conda:  conda install -c conda-forge gdal
-# WhiteboxTools: either bundled in pwa_tools/WBT/ or install the cross-platform
-# pip package:  pip install whitebox
 
 [project.optional-dependencies]
 dev = [

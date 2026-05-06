@@ -56,6 +56,7 @@ def resample_lidar_raster(input_path: Path, resolution_m: float) -> Path:
     subprocess.run(
         [
             "gdalwarp",
+            "-overwrite",
             "-tr", str(resolution_m), str(resolution_m),
             "-r", "cubic",
             str(input_path),

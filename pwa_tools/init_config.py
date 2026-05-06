@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="pwa-init-config",
+        prog="pwa-init-hydrocondition",
         description=(
             "Interactively build a pwa_config.yml suitable for "
             "pwa_tools.runner.run_step0."

@@ -117,6 +117,65 @@ def test_prompt_for_config_multi_lidar(tmp_path: Path) -> None:
     assert config.inputs.multiple_lidar_rasters is True
 
 
+# ============ prompt_for_config staging warning ============
+
+
+def test_prompt_for_config_warns_when_inputs_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """When the named inputs aren't staged on disk, prompt_for_config should
+    print a non-blocking warning so users catch typos and case-mismatches
+    without re-running the full pipeline."""
+    with patch("builtins.input", return_value=""):
+        config = prompt_for_config(
+            base_data_dir=tmp_path,
+            defaults={
+                "watershed": "grassmere",
+                "clrh": "finalcat_info_v1-0",
+                "lidar": "Pembina_LiDAR_DEM",
+                "nhn": "NHN_05MH000_3_0_HD_SLWATER_1",
+                "culvert": "",
+                "crs": "EPSG:3158",
+            },
+        )
+
+    captured = capsys.readouterr()
+    # Warning goes to stderr, lists at least one of the missing input filenames
+    assert "finalcat_info_v1-0.shp" in captured.err
+    # Should not raise — this is a warning, not an error
+    assert config is not None
+
+
+def test_prompt_for_config_no_warning_when_inputs_present(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """If every named input file already exists on disk, no warning."""
+    # Pre-stage the expected directory layout & files
+    raw = tmp_path / "grassmere" / "HydroConditioning" / "Raw"
+    raw.mkdir(parents=True)
+    (raw / "finalcat_info_v1-0.shp").touch()
+    (raw / "Pembina_LiDAR_DEM.tif").touch()
+    (raw / "NHN_05MH000_3_0_HD_SLWATER_1.shp").touch()
+
+    with patch("builtins.input", return_value=""):
+        prompt_for_config(
+            base_data_dir=tmp_path,
+            defaults={
+                "watershed": "grassmere",
+                "clrh": "finalcat_info_v1-0",
+                "lidar": "Pembina_LiDAR_DEM",
+                "nhn": "NHN_05MH000_3_0_HD_SLWATER_1",
+                "culvert": "",
+                "crs": "EPSG:3158",
+            },
+        )
+
+    captured = capsys.readouterr()
+    # No warning text in stderr — the file paths from expected_input_files
+    # should not appear at all
+    assert "finalcat_info_v1-0.shp" not in captured.err
+
+
 # ============ runner import ============
 
 
