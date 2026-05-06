@@ -285,13 +285,17 @@ def resample_lidar_raster(lidar_file, resolution_m):
     LIDAR_RESAMPLED_FILE = lidar_file + \
                         f"_resample_{resolution_m}{resolution_units}"
 
+    # check=True so a gdalwarp failure raises here. Without it, a silent
+    # exit lets the next log line falsely claim the resampled file was
+    # written, and clip_lidar_to_shapefile crashes much later with a
+    # confusing RasterioIOError on the missing/stale output.
     subprocess.run([
         "gdalwarp",
         "-tr", str(resolution_m), str(resolution_m),
         "-r", "cubic",
         lidar_file + ".tif",
         LIDAR_RESAMPLED_FILE + ".tif"
-    ])
+    ], check=True)
 
     logger.info("Inside resample_lidar_raster(): resampled file written to %s", LIDAR_RESAMPLED_FILE)
     logger.info("resample_lidar_raster() has ended.")
