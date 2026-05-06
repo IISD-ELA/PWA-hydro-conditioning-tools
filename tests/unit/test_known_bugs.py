@@ -1,9 +1,12 @@
-"""Regression tests for known bugs documented in project-review/bug-tracker.md.
+"""Regression checkpoints for behaviours the legacy ``pwa_tools.__init__``
+code still gets wrong. The corresponding ``pwa_tools.io.*`` modules have
+already been fixed (and are covered positively in ``test_shapefile.py``,
+``test_raster.py``, etc.); the xfail markers below are reminders that the
+legacy god-file consumer still needs migration before those bugs disappear
+for real users.
 
-Each test asserts the *correct* (post-fix) behavior and is marked `xfail` until
-the corresponding fix lands. When a fix arrives, pytest reports `XPASS` for the
-matching test and the `@pytest.mark.xfail` marker should be removed in the same
-PR — that is the signal the bug is closed.
+When the legacy ``__init__.py`` function is deleted, drop both the marker
+and the test in the same change.
 """
 
 from __future__ import annotations
@@ -20,18 +23,20 @@ import pwa_tools
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "BUG-001: read_shapefile() raises UnboundLocalError when the input "
-        "shapefile's CRS already matches state.crs_string and new_crs is the "
-        "default empty string. Neither if/elif branch fires, leaving shape_out "
-        "unassigned. See bug-tracker.md and pwa_tools/__init__.py:247-262. "
-        "Fix scheduled in Phase 1 of the cleanup project."
+        "Legacy pwa_tools.read_shapefile raises UnboundLocalError when "
+        "the input shapefile's CRS already matches state.crs_string and "
+        "new_crs is the default empty string — neither if/elif branch "
+        "fires, leaving shape_out unassigned. The new pwa_tools.io.shapefile "
+        "module fixes this; the xfail will go away once hydro_condition.py "
+        "stops importing the legacy function."
     ),
 )
-def test_bug_001_read_shapefile_with_matching_crs(
+def test_legacy_read_shapefile_with_matching_crs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When a shapefile is already in the project CRS, read_shapefile should
-    return it unchanged. Currently raises UnboundLocalError.
+    return it unchanged. The legacy implementation in __init__.py raises
+    UnboundLocalError instead.
     """
     # Set the project CRS that read_shapefile will compare against
     monkeypatch.setattr(pwa_tools.state, "crs_string", "EPSG:4326")

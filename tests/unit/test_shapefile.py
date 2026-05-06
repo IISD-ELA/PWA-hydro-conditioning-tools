@@ -1,4 +1,4 @@
-"""Unit tests for pwa_tools.io.shapefile — the BUG-001-fixed read_shapefile.
+"""Unit tests for pwa_tools.io.shapefile.read_shapefile.
 
 Creates tiny single-point shapefiles in tmp_path to exercise all code paths.
 No external data needed.
@@ -48,8 +48,9 @@ def test_read_shapefile_reproject_to_different_crs(tmp_path: Path) -> None:
 def test_read_shapefile_matching_crs_returns_as_is(tmp_path: Path) -> None:
     """target_crs matches file CRS → return unchanged.
 
-    This is the BUG-001 scenario. The original read_shapefile in __init__.py
-    crashes here with UnboundLocalError. The new version handles it correctly.
+    Pins the no-reprojection path. The legacy implementation in
+    __init__.py raised UnboundLocalError on this branch because neither
+    of its if/elif arms set the return variable.
     """
     shp = _write_point_shp(tmp_path, "test", "EPSG:4326")
     gdf = read_shapefile(shp, target_crs="EPSG:4326")

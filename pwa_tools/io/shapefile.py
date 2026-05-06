@@ -8,10 +8,10 @@ Key changes from the original:
   - Accepts ``target_crs`` as an explicit parameter instead of reading the global
     ``state.crs_string``. Callers pass ``config.inputs.crs_string`` from
     :class:`~pwa_tools.config.PwaConfig`.
-  - Fixes BUG-001: the original crashes with ``UnboundLocalError`` when the
-    shapefile's CRS already matches the project CRS — neither ``if`` nor ``elif``
-    branch fires, leaving ``shape_out`` unassigned. The new code returns the
-    GeoDataFrame as-is when no reprojection is needed.
+  - Returns the GeoDataFrame as-is when no reprojection is needed. The
+    original crashed with ``UnboundLocalError`` when the shapefile's CRS
+    already matched the project CRS — neither the ``if`` nor the
+    ``elif`` branch fired, leaving ``shape_out`` unassigned.
   - Removes the dead ``state.log`` write (assigned 4 times, read 0 times).
   - Validates that the file exists before attempting to read.
   - Validates that the shapefile has a CRS before attempting to reproject.

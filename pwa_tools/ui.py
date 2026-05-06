@@ -48,8 +48,9 @@ def _prompt_filename(description: str, default: str | None = None) -> str | list
 
     if "LiDAR" in description and "," in filename:
         filenames = [f.strip() for f in filename.split(",") if f.strip()]
-        # BUG-010 fix: original `filenames if filenames` was truthy even
-        # for ["", "", ""]. Filter empty entries out and re-check.
+        # The original `filenames if filenames` short-circuited the empty
+        # check because a list of empty strings is still truthy. Filter
+        # empties first, then check whether anything's left.
         if filenames:
             return filenames
         if default is not None:

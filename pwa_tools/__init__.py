@@ -91,10 +91,10 @@ class hydrocon_usr_input:
         filename = input(prompt)
         if description == "LiDAR DEM raster" and "," in filename:
             filename = [f.strip() for f in filename.split(",")]
-            # BUG-010 fix: after splitting on commas, `filename` is a list,
-            # so `filename == ""` is always False — the original code
-            # silently bypassed the empty-input check. The list-form is
-            # empty when every element is empty (or there are no elements).
+            # After splitting on commas, `filename` is a list, so the
+            # original `filename == ""` check is always False — empty
+            # input silently passed validation. Treat a list of all
+            # empty strings (or a literally empty list) as empty.
             def _list_is_empty(items):
                 return not items or all(item == "" for item in items)
             if default_value is None and _list_is_empty(filename):
@@ -487,8 +487,8 @@ def clip_nhn_to_watershed(nhn_filename,
     this_dir = os.path.dirname(os.path.abspath(__file__))
 
     # # Save working directory so we can return to it later
-    # BUG-007 fix: WhiteboxTools chdirs internally; wrap in try/finally so
-    # an exception in wbt.clip() doesn't strand the process in WBT/.
+    # WhiteboxTools chdirs internally; wrap the call in try/finally so an
+    # exception in wbt.clip() doesn't strand the process in WBT/.
     original_dir = os.getcwd()
 
     # # Initialize whitebox tools object
@@ -612,8 +612,8 @@ def gen_depressions_raster(lidar_filename,
     this_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Save working directory so we can return to it later
-    # BUG-007 fix: WhiteboxTools chdirs internally; wrap in try/finally so
-    # an exception in any wbt.* call doesn't strand the process in WBT/.
+    # WhiteboxTools chdirs internally; wrap the call in try/finally so an
+    # exception in any wbt.* call doesn't strand the process in WBT/.
     original_dir = os.getcwd()
 
     # Initialize whitebox tools object
@@ -676,8 +676,8 @@ def calc_depression_depths(clrh_proj_lidar_file,
     this_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Save working directory so we can return to it later
-    # BUG-007 fix: WhiteboxTools chdirs internally; wrap in try/finally so
-    # an exception in any wbt.* / gdalwarp call doesn't strand the process
+    # WhiteboxTools chdirs internally; wrap the call in try/finally so an
+    # exception in any wbt.* / gdalwarp call doesn't strand the process
     # in WBT/.
     original_dir = os.getcwd()
 
@@ -707,22 +707,23 @@ def calc_depression_depths(clrh_proj_lidar_file,
         )
 
         # Open clrh subbasins raster file. The CRS-overwrite step is a
-        # holdover from when this code was hardcoded to UTM Zone 14N
-        # (BUG-014). The `profile`/`target_crs` locals are computed but
-        # never used — leaving them in place to preserve behaviour while
-        # we wait on Thomas to confirm whether this was load-bearing for
-        # any downstream step.
+        # holdover from when this code hardcoded UTM Zone 14N — non-Manitoba
+        # watersheds were silently reprojected to the wrong CRS. The
+        # `profile`/`target_crs` locals are computed but never used —
+        # leaving them in place to preserve behaviour while we wait on
+        # Thomas to confirm whether this was load-bearing for any
+        # downstream step.
         with rasterio.open(state.CLRH_RASTER_FILE+".tif") as src:
             profile = src.profile  # noqa: F841 — kept for behavioural parity
-            # BUG-014: was `target_crs = 26914` (forced UTM 14N regardless of data).
-            # Use the source raster's actual CRS so non-Manitoba watersheds work.
+            # Read the source raster's actual CRS instead of the original
+            # `target_crs = 26914` that forced UTM 14N regardless of data.
             target_crs = src.crs.to_epsg() if src.crs else None
             if target_crs is not None:
                 profile.update(crs=CRS.from_epsg(target_crs))
 
-        # BUG-009 fix: extract bounds with a single context-managed open
-        # rather than four inline `rasterio.open(...)` calls inside the
-        # subprocess args (each of which leaked a file handle).
+        # Extract bounds with a single context-managed open instead of the
+        # original four inline `rasterio.open(...)` calls inside the
+        # subprocess args, which leaked one file handle per call.
         depressions_tif = depressions_raster_file + ".tif"
         with rasterio.open(depressions_tif) as deps_src:
             deps_bounds = deps_src.bounds
@@ -1152,10 +1153,10 @@ def merge_rasters(lidar_files, gdf):
 #--------------------RECOVERY FUNCTIONS------------------------
 
 def recover_state(recovery_path = None, last_function_expected = None):
-    # BUG-008 fix: the default `last_function_expected = state.LAST_FUNCTION_RUN`
-    # was evaluated at import time, capturing whatever LAST_FUNCTION_RUN was
-    # then (typically None). The intent was "default to the current value of
-    # LAST_FUNCTION_RUN at call time", which we now resolve inside the function.
+    # The previous default `last_function_expected = state.LAST_FUNCTION_RUN`
+    # was evaluated at import time and froze whatever LAST_FUNCTION_RUN
+    # held then (typically None). Resolve it at call time instead so we
+    # check against the current value, not the import-time snapshot.
     if last_function_expected is None:
         last_function_expected = state.LAST_FUNCTION_RUN
 
