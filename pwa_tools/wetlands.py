@@ -26,8 +26,8 @@ from shapely.geometry import shape as shapely_shape
 logger = logging.getLogger(__name__)
 
 # Thresholds for filtering insignificant wetlands
-_DEPTH_THRESHOLD_M = 0.05   # ignore depressions shallower than 5 cm
-_AREA_THRESHOLD_M2 = 100    # minimum wetland area
+_DEPTH_THRESHOLD_M = 0.1   # ignore depressions shallower than 10 cm
+_AREA_THRESHOLD_M2 = 4000    # minimum wetland area
 _VOLUME_THRESHOLD_M3 = 30   # minimum wetland storage volume
 
 
