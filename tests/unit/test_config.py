@@ -56,6 +56,50 @@ def test_paths_coerces_str_base_data_to_path(tmp_path: Path) -> None:
     assert isinstance(paths.base_data, Path)
 
 
+def test_clean_interim_removes_stale_files_and_subdirs(tmp_path: Path) -> None:
+    """Every Step 0 run starts with an empty Interim/ — leftover files
+    and subdirectories from a prior run get wiped, not silently shadowed
+    by the new run's outputs."""
+    paths = PwaPaths.from_watershed(tmp_path, "cypress_river")
+    paths.make_dirs()
+    (paths.hydrocon_interim / "stale.tif").write_text("old raster")
+    sub = paths.hydrocon_interim / "scratch"
+    sub.mkdir()
+    (sub / "nested.tif").write_text("nested junk")
+
+    paths.clean_interim()
+
+    assert paths.hydrocon_interim.is_dir()
+    assert list(paths.hydrocon_interim.iterdir()) == []
+
+
+def test_clean_interim_is_noop_when_dir_missing(tmp_path: Path) -> None:
+    """First-ever run has no Interim/ yet — clean_interim must not raise.
+    Callers run make_dirs() separately to materialize the layout."""
+    paths = PwaPaths.from_watershed(tmp_path, "cypress_river")
+    # No make_dirs() — Interim/ does not exist yet.
+    paths.clean_interim()  # must not raise
+    assert not paths.hydrocon_interim.exists()
+
+
+def test_clean_interim_refuses_path_not_named_interim(tmp_path: Path) -> None:
+    """Safety net: if a caller hand-builds a PwaPaths with the wrong
+    hydrocon_interim, clean_interim must refuse rather than rm -rf the
+    contents of an unrelated directory."""
+    from dataclasses import replace
+
+    paths = PwaPaths.from_watershed(tmp_path, "cypress_river")
+    bad_target = tmp_path / "NotInterim"
+    bad_target.mkdir()
+    (bad_target / "precious.txt").write_text("do not delete me")
+    bad_paths = replace(paths, hydrocon_interim=bad_target)
+
+    with pytest.raises(ValueError, match="not 'Interim'"):
+        bad_paths.clean_interim()
+    # Contents untouched.
+    assert (bad_target / "precious.txt").read_text() == "do not delete me"
+
+
 # ============ PwaInputs ============
 
 

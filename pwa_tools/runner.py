@@ -79,6 +79,11 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     # 1. Create directory structure
     config.paths.make_dirs()
 
+    # 1b. Wipe Interim/ so stale files from a prior (possibly partial)
+    #     run can't be misread as outputs of this one. Clean-first
+    #     idempotency model; Processed/ is intentionally left alone.
+    config.paths.clean_interim()
+
     # 2. Load CLRH watershed shapefile
     clrh_path = config.paths.hydrocon_raw / f"{config.inputs.clrh_filename}.shp"
     clrh_gdf = read_shapefile(clrh_path, target_crs=config.inputs.crs_string)

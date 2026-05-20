@@ -10,11 +10,15 @@ See ``project-review/state-field-map.md`` for the analysis driving this design.
 
 from __future__ import annotations
 
+import logging
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+
+logger = logging.getLogger(__name__)
 
 _EPSG_PATTERN = re.compile(r"^EPSG:\d+$", re.IGNORECASE)
 
@@ -57,6 +61,34 @@ class PwaPaths:
         """Create the directory structure on disk. Idempotent."""
         for path in (self.hydrocon_raw, self.hydrocon_interim, self.hydrocon_processed):
             path.mkdir(parents=True, exist_ok=True)
+
+    def clean_interim(self) -> None:
+        """Empty the ``Interim/`` directory at the start of a Step 0 run.
+
+        Clean-first idempotency model: every Step 0 run starts with an
+        empty ``Interim/`` so stale files from a prior — possibly
+        partial — run can't be misread as outputs of the new run.
+        ``Processed/`` is intentionally untouched.
+
+        Safety: refuses to clean a path whose directory name isn't
+        ``Interim``, defending against a misconfigured :class:`PwaPaths`
+        from blowing away the wrong tree. No-op if ``Interim/`` doesn't
+        exist — callers that want a guaranteed-empty directory on return
+        should call :meth:`make_dirs` afterwards (or before).
+        """
+        target = self.hydrocon_interim
+        if target.name != "Interim":
+            raise ValueError(
+                f"refusing to clean {target} — its directory name is not 'Interim'"
+            )
+        if not target.exists():
+            return
+        for item in target.iterdir():
+            if item.is_dir():
+                shutil.rmtree(item)
+            else:
+                item.unlink()
+        logger.info("Cleaned Interim/: %s", target)
 
 
 @dataclass(frozen=True)
