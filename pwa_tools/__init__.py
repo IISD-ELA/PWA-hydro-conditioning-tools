@@ -1,6 +1,7 @@
-# Adapted for PWA-hydro-conditioning-tools v. 1.0 
+# Adapted for PWA-hydro-conditioning-tools v. 1.0
 
 # System
+import logging
 import pickle
 import os
 import sys
@@ -10,6 +11,14 @@ import shutil
 from glob import glob
 import tempfile
 import subprocess
+
+# Module logger. Library convention: do NOT call logging.basicConfig() here —
+# the consumer is expected to configure handlers (e.g. hydro_condition.py
+# adds `logging.basicConfig(level=logging.INFO)`). Without that, all
+# logger.* calls in this module are silent. We attach a NullHandler so the
+# stdlib doesn't emit "No handlers could be found" warnings.
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 # Analysis
@@ -32,11 +41,6 @@ import collections
 from collections import defaultdict
 # do not use pip to install gdal, use conda instead (conda install -c conda-forge gdal)
 from osgeo import gdal
-
-
-# Visualization
-import matplotlib.pyplot as plt
-import rasterio.plot
 
 
 # Whitebox
@@ -82,10 +86,17 @@ class hydrocon_usr_input:
         filename = input(prompt)
         if description == "LiDAR DEM raster" and "," in filename:
             filename = [f.strip() for f in filename.split(",")]
-            if default_value is None and filename == "":
-                while filename == "":
-                    filename = input(f"A file name is required. " + prompt).strip()
-            elif filename == "":
+            # After splitting on commas, `filename` is a list, so the
+            # original `filename == ""` check is always False — empty
+            # input silently passed validation. Treat a list of all
+            # empty strings (or a literally empty list) as empty.
+            def _list_is_empty(items):
+                return not items or all(item == "" for item in items)
+            if default_value is None and _list_is_empty(filename):
+                while _list_is_empty(filename):
+                    raw = input(f"A file name is required. " + prompt).strip()
+                    filename = [f.strip() for f in raw.split(",")] if raw else []
+            elif _list_is_empty(filename):
                 filename = default_value
                 print(f"No {description} name provided. Default applied ('{default_value}').")
         else:
@@ -127,11 +138,11 @@ def save_state():
         pickle_file_path = Path(state.RECOVERY_PATH) / "state.pkl"
         with open(pickle_file_path, 'wb') as f:
             pickle.dump(state, f)
-        print(f"State saved to: {state.RECOVERY_PATH}")
+        logger.info("State saved to: %s", state.RECOVERY_PATH)
     else:
-        print("Recovery mode not enabled. Directory information not saved to pickle file.")
+        logger.info("Recovery mode not enabled. Directory information not saved to pickle file.")
 
-    print(f"Project setup complete. Data organized in directory: {state.WATERSHED_PATH}")
+    logger.info("Project setup complete. Data organized in directory: %s", state.WATERSHED_PATH)
 
 def set_directory_structure(default_watershed = "cypress_river", data_dir = None, recovery_mode = False):
     """
@@ -188,7 +199,7 @@ def set_directory_structure(default_watershed = "cypress_river", data_dir = None
          if file.is_file():
             destination_file = dst / file.name
             if destination_file.exists():
-                print(f"Skipped (already exists): {file.name}")
+                logger.info("Skipped (already exists): %s", file.name)
                 continue
             shutil.move(str(file), destination_file)
 
@@ -263,22 +274,26 @@ def read_shapefile(filename: str, directory: str, new_crs = ''):
 
 
 def resample_lidar_raster(lidar_file, resolution_m):
-    print("Starting resample_lidar_raster()...")
+    logger.info("Starting resample_lidar_raster()...")
     
     resolution_units = "m"
     LIDAR_RESAMPLED_FILE = lidar_file + \
                         f"_resample_{resolution_m}{resolution_units}"
 
+    # check=True so a gdalwarp failure raises here. Without it, a silent
+    # exit lets the next log line falsely claim the resampled file was
+    # written, and clip_lidar_to_shapefile crashes much later with a
+    # confusing RasterioIOError on the missing/stale output.
     subprocess.run([
         "gdalwarp",
         "-tr", str(resolution_m), str(resolution_m),
         "-r", "cubic",
         lidar_file + ".tif",
         LIDAR_RESAMPLED_FILE + ".tif"
-    ])
+    ], check=True)
 
-    print(f"Inside resample_lidar_raster(): The resampled file has been written to {LIDAR_RESAMPLED_FILE}.")
-    print("resample_lidar_raster() has ended.")
+    logger.info("Inside resample_lidar_raster(): resampled file written to %s", LIDAR_RESAMPLED_FILE)
+    logger.info("resample_lidar_raster() has ended.")
 
     state.LAST_FUNCTION_RUN = "resample_lidar_raster"
     save_state()
@@ -289,7 +304,7 @@ def resample_lidar_raster(lidar_file, resolution_m):
 def project_crs_subbasins_to_nhn(nhn_gdf, 
                              subbasins_gdf,
                              subbasins_filename):
-    print("Starting project_crs_subbasins_to_nhn()...")
+    logger.info("Starting project_crs_subbasins_to_nhn()...")
 
     # CRS for NHN shapefile
     input_NHN_crs = nhn_gdf.crs
@@ -323,10 +338,9 @@ def project_crs_subbasins_to_nhn(nhn_gdf,
                             
 
     # Print results
-    print("Inside project_subbasins_to_nhn(): Shapefile projection is aligned with NHN projection: ", 
-        is_correctly_projected_clrh_nhn)
-    print(f"Inside project_subbasins_to_nhn(): The projected shapefile has been written to {state.SUBBASINS_PROJ_NHN_FILE}.")
-    print("project_crs_subbasins_to_nhn() has ended.")
+    logger.info("Inside project_subbasins_to_nhn(): aligned with NHN projection = %s", is_correctly_projected_clrh_nhn)
+    logger.info("Inside project_subbasins_to_nhn(): projected shapefile written to %s", state.SUBBASINS_PROJ_NHN_FILE)
+    logger.info("project_crs_subbasins_to_nhn() has ended.")
 
     state.LAST_FUNCTION_RUN = "project_crs_subbasins_to_nhn"
     save_state()
@@ -337,7 +351,7 @@ def project_crs_subbasins_to_nhn(nhn_gdf,
 
 def project_subbasins_to_lidar(gdf, gdf_filename,
                                    lidar_filename, lidar_directory):
-    print("Starting project_crs_subbasins_to_lidar()...")
+    logger.info("Starting project_crs_subbasins_to_lidar()...")
                                        
     with rasterio.open(lidar_directory + \
                        lidar_filename + \
@@ -366,10 +380,9 @@ def project_subbasins_to_lidar(gdf, gdf_filename,
     is_correctly_projected_clrh_lidar = (input_DEM_crs == clrh_gdf_projected_lidar.crs)         
     
     # Print results
-    print("Inside project_crs_subbasins_to_lidar(): Shapefile projection is aligned with DEM projection: ", 
-          is_correctly_projected_clrh_lidar)
-    print(f"Inside project_crs_subbasins_to_lidar(): The projected shapefile has been written to {state.CLRH_PROJ_LIDAR_FILE}.")
-    print("project_crs_subbasins_to_lidar() has ended.")
+    logger.info("Inside project_crs_subbasins_to_lidar(): aligned with DEM projection = %s", is_correctly_projected_clrh_lidar)
+    logger.info("Inside project_crs_subbasins_to_lidar(): projected shapefile written to %s", state.CLRH_PROJ_LIDAR_FILE)
+    logger.info("project_crs_subbasins_to_lidar() has ended.")
 
     state.LAST_FUNCTION_RUN = "project_crs_subbasins_to_lidar"
     save_state()
@@ -414,7 +427,7 @@ def extend_line(line_geom, extension_distance):
 
 def clip_lidar_to_shapefile(projected_gdf,
                            lidar_filename, lidar_directory):
-    print("Starting clip_lidar_to_shapefile()...")
+    logger.info("Starting clip_lidar_to_shapefile()...")
     # Convert projected subbasins data to GeoJSON-like format
     shapes = [mapping(geom) for geom in projected_gdf.geometry]
 
@@ -447,8 +460,8 @@ def clip_lidar_to_shapefile(projected_gdf,
                     **out_meta) as dest:
         dest.write(out_image)
                         
-    print(f"Inside clip_lidar_to_shapefile(): the clipped file has been written to {LIDAR_CLIPPED_FILE}.")
-    print("clip_lidar_to_shapefile() has ended.")
+    logger.info("Inside clip_lidar_to_shapefile(): clipped file written to %s", LIDAR_CLIPPED_FILE)
+    logger.info("clip_lidar_to_shapefile() has ended.")
 
     state.LAST_FUNCTION_RUN = "clip_lidar_to_shapefile"
     save_state()
@@ -462,13 +475,15 @@ def clip_nhn_to_watershed(nhn_filename,
                           input_DEM_crs_alnum, 
                           culvert_filename = ''):
     
-    print("Starting clip_nhn_to_watershed()...")
+    logger.info("Starting clip_nhn_to_watershed()...")
 
 
     # # Get path to the folder where THIS file lives (required to access WhiteboxTools)
     this_dir = os.path.dirname(os.path.abspath(__file__))
 
     # # Save working directory so we can return to it later
+    # WhiteboxTools chdirs internally; wrap the call in try/finally so an
+    # exception in wbt.clip() doesn't strand the process in WBT/.
     original_dir = os.getcwd()
 
     # # Initialize whitebox tools object
@@ -476,23 +491,23 @@ def clip_nhn_to_watershed(nhn_filename,
 
     # # Set whitebox directory
     wbt_dir = os.path.join(this_dir, "WBT")
-    
+
     wbt.set_whitebox_dir(wbt_dir)
 
-    
     # Clipped NHN shapefile name with PATH
     state.NHN_CLIPPED_FILE = state.HYDROCON_RAW_PATH + \
                         nhn_filename
 
-    # Clip NHN streams shapefile to watershed
-    wbt.clip(
-    i=state.HYDROCON_RAW_PATH+nhn_filename+".shp",
-    clip=clrh_proj_nhn_file+".shp",
-    output=state.NHN_CLIPPED_FILE+".shp"
-    )
-
-    # Return to original working directory
-    os.chdir(original_dir)
+    try:
+        # Clip NHN streams shapefile to watershed
+        wbt.clip(
+        i=state.HYDROCON_RAW_PATH+nhn_filename+".shp",
+        clip=clrh_proj_nhn_file+".shp",
+        output=state.NHN_CLIPPED_FILE+".shp"
+        )
+    finally:
+        # Return to original working directory
+        os.chdir(original_dir)
 
     # Load NHN streams shapefile
     nhn_gdf_clip = gpd.read_file(state.NHN_CLIPPED_FILE + \
@@ -525,10 +540,8 @@ def clip_nhn_to_watershed(nhn_filename,
     is_correctly_projected_nhn_lidar = (input_DEM_crs == burn_lines_projected_lidar.crs)
 
     # Print results
-    print("Inside clip_nhn_to_watershed(): NHN shapefile projection is aligned with DEM projection: ", 
-        is_correctly_projected_nhn_lidar)
-    print("clip_nhn_to_watershed() has ended.")
-    print("clip_nhn_to_watershed has ended.")
+    logger.info("Inside clip_nhn_to_watershed(): aligned with DEM projection = %s", is_correctly_projected_nhn_lidar)
+    logger.info("clip_nhn_to_watershed() has ended.")
 
     state.LAST_FUNCTION_RUN = "clip_nhn_to_watershed"
     save_state()
@@ -556,7 +569,7 @@ def append_culvert_lines(channels_gdf, culvert_gdf):
             lambda geom: extend_line(geom, 2.0)
         )
     else:
-        print("Warning: line extension feature requires a projected CRS. Skipping line extension for culvert geometries.")
+        logger.warning("Line extension requires a projected CRS. Skipping line extension for culvert geometries.")
 
         state.log = f"Extended {len(culvert_gdf)} line segments by 2m on each end"
 
@@ -588,12 +601,14 @@ def gen_depressions_raster(lidar_filename,
                             lidar_clipped_resampled_file,
                             nhn_clipped_projected_lidar_file,
                             resolution_m):
-    print("Starting gen_depressions_raster()...")
+    logger.info("Starting gen_depressions_raster()...")
 
     # Get path to the folder where THIS file lives (required to access WhiteboxTools)
     this_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Save working directory so we can return to it later
+    # WhiteboxTools chdirs internally; wrap the call in try/finally so an
+    # exception in any wbt.* call doesn't strand the process in WBT/.
     original_dir = os.getcwd()
 
     # Initialize whitebox tools object
@@ -603,42 +618,39 @@ def gen_depressions_raster(lidar_filename,
     wbt_dir = os.path.join(this_dir, "WBT")
     wbt.set_whitebox_dir(wbt_dir)
 
-    # Burn streams into DEM and fill
-    wbt.fill_burn(
-        dem=lidar_clipped_resampled_file+".tif",
-        streams=nhn_clipped_projected_lidar_file+".shp",
-        output=lidar_clipped_resampled_file+"_FillBurn"+".tif"
-    )
-
-
-    # Subtract raw DEM from filled DEM
-    first_statement_operand = lidar_clipped_resampled_file+"_FillBurn"+".tif"
-    second_statement_operand = lidar_clipped_resampled_file+".tif"
-    wbt.raster_calculator(
-        output = lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif",
-        statement = f"'{first_statement_operand}' - '{second_statement_operand}'"  
-    )
-
-
     # Depressions raster file with path
     state.DEPRESSIONS_RASTER_FILE = state.HYDROCON_PROCESSED_PATH + lidar_filename + \
                             f"_clip_resample_{resolution_m}m_FillBurn_Deps_Corr"
 
+    try:
+        # Burn streams into DEM and fill
+        wbt.fill_burn(
+            dem=lidar_clipped_resampled_file+".tif",
+            streams=nhn_clipped_projected_lidar_file+".shp",
+            output=lidar_clipped_resampled_file+"_FillBurn"+".tif"
+        )
 
-    # Remove stray burn lines
-    wbt.conditional_evaluation(
-        i=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif",
-        output=state.DEPRESSIONS_RASTER_FILE+".tif",
-        statement="value < 0.0",
-        true=0.0,
-        false=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif"
-    )
+        # Subtract raw DEM from filled DEM
+        first_statement_operand = lidar_clipped_resampled_file+"_FillBurn"+".tif"
+        second_statement_operand = lidar_clipped_resampled_file+".tif"
+        wbt.raster_calculator(
+            output = lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif",
+            statement = f"'{first_statement_operand}' - '{second_statement_operand}'"
+        )
 
-    # Return to original working directory
-    os.chdir(original_dir)
+        # Remove stray burn lines
+        wbt.conditional_evaluation(
+            i=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif",
+            output=state.DEPRESSIONS_RASTER_FILE+".tif",
+            statement="value < 0.0",
+            true=0.0,
+            false=lidar_clipped_resampled_file+"_FillBurn_Deps"+".tif"
+        )
+    finally:
+        # Return to original working directory
+        os.chdir(original_dir)
 
-    print("Inside gen_depressions_raster(): The depressions raster has been generated and saved to: ",
-          state.DEPRESSIONS_RASTER_FILE + ".tif")
+    logger.info("Inside gen_depressions_raster(): depressions raster saved to %s.tif", state.DEPRESSIONS_RASTER_FILE)
     
     state.LAST_FUNCTION_RUN = "gen_depressions_raster"
     save_state()
@@ -650,7 +662,7 @@ def calc_depression_depths(clrh_proj_lidar_file,
                            watershed_name,
                            depressions_raster_file,
                            clrh_gdf_projected_lidar):
-    print("Starting calc_depression_depths()...")
+    logger.info("Starting calc_depression_depths()...")
 
     # CLRH subbasins raster file name with path 
     state.CLRH_RASTER_FILE = clrh_proj_lidar_file + "_raster"
@@ -659,6 +671,9 @@ def calc_depression_depths(clrh_proj_lidar_file,
     this_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Save working directory so we can return to it later
+    # WhiteboxTools chdirs internally; wrap the call in try/finally so an
+    # exception in any wbt.* / gdalwarp call doesn't strand the process
+    # in WBT/.
     original_dir = os.getcwd()
 
     # Initialize whitebox tools object
@@ -668,69 +683,84 @@ def calc_depression_depths(clrh_proj_lidar_file,
     wbt_dir = os.path.join(this_dir, "WBT")
     wbt.set_whitebox_dir(wbt_dir)
 
-    # # Convert clrh subbasin polygons to raster
-    wbt.vector_polygons_to_raster(
-        i=clrh_proj_lidar_file+".shp",
-        output=state.CLRH_RASTER_FILE+".tif",
-        field = "FID",
-        nodata = True,
-        cell_size = 5.0
-    )
-
-    # Open clrh subbasins raster file
-    with rasterio.open(state.CLRH_RASTER_FILE+".tif") as src:
-        target_crs = 26914
-        profile = src.profile
-        profile.update(crs=CRS.from_epsg(target_crs))
-    
     # Zonal stats file name with path
-    state.ZONAL_STATS_FILE = Path(state.HYDROCON_PROCESSED_PATH, 
+    state.ZONAL_STATS_FILE = Path(state.HYDROCON_PROCESSED_PATH,
                     f"ZonalStats_{watershed_name}.html").resolve()
 
-
-    # Make sure that the hydrofabric raster is aligned with the depression raster
-    subprocess.run([
-        "gdalwarp",
-        "-r", "near",               
-        "-overwrite",    
-        "-tr", "5", "5",            
-        "-te",                     
-        str(rasterio.open(depressions_raster_file + ".tif").bounds.left),
-        str(rasterio.open(depressions_raster_file + ".tif").bounds.bottom),
-        str(rasterio.open(depressions_raster_file + ".tif").bounds.right),
-        str(rasterio.open(depressions_raster_file + ".tif").bounds.top),
-        state.CLRH_RASTER_FILE + ".tif",
-        state.CLRH_RASTER_FILE + "_aligned" + ".tif"
-    ])
-
-
-    # Calculate zonal statistics for depression raster
-    wbt.zonal_statistics(
-        i=depressions_raster_file + ".tif",
-        features=state.CLRH_RASTER_FILE + "_aligned" + ".tif",
-        stat="total",
-        out_table=state.ZONAL_STATS_FILE
-    )
-
-    # Read zonal stats html as pandas df
-    zonal_stats_df = pd.read_html(state.ZONAL_STATS_FILE,
-                                flavor='bs4')[0]
-
-    # Calculate depression depths (mm) and add field to gdf
-    clrh_gdf_projected_lidar['Deps_Depth_mm'] = zonal_stats_df['Mean'] * 1000
-
-    # Calculate depression volumes (m3) and add field to gdf
-    clrh_gdf_projected_lidar['Deps_Vol_m3'] = clrh_gdf_projected_lidar['Deps_Depth_mm']*clrh_gdf_projected_lidar['BasArea']
-    
     # Depression depths file name with path
     state.DEPRESSION_DEPTHS_FILE = state.HYDROCON_PROCESSED_PATH + \
                             "CLRH_basins_depression_depths"
 
-    # Write geodataframe to file for use in raven input file creation
-    clrh_gdf_projected_lidar.to_file(state.DEPRESSION_DEPTHS_FILE + ".shp")
+    try:
+        # # Convert clrh subbasin polygons to raster
+        wbt.vector_polygons_to_raster(
+            i=clrh_proj_lidar_file+".shp",
+            output=state.CLRH_RASTER_FILE+".tif",
+            field = "FID",
+            nodata = True,
+            cell_size = 5.0
+        )
 
-    # Return to original working directory
-    os.chdir(original_dir)
+        # Open clrh subbasins raster file. The CRS-overwrite step is a
+        # holdover from when this code hardcoded UTM Zone 14N — non-Manitoba
+        # watersheds were silently reprojected to the wrong CRS. The
+        # `profile`/`target_crs` locals are computed but never used —
+        # leaving them in place to preserve behaviour while we wait on
+        # Thomas to confirm whether this was load-bearing for any
+        # downstream step.
+        with rasterio.open(state.CLRH_RASTER_FILE+".tif") as src:
+            profile = src.profile  # noqa: F841 — kept for behavioural parity
+            # Read the source raster's actual CRS instead of the original
+            # `target_crs = 26914` that forced UTM 14N regardless of data.
+            target_crs = src.crs.to_epsg() if src.crs else None
+            if target_crs is not None:
+                profile.update(crs=CRS.from_epsg(target_crs))
+
+        # Extract bounds with a single context-managed open instead of the
+        # original four inline `rasterio.open(...)` calls inside the
+        # subprocess args, which leaked one file handle per call.
+        depressions_tif = depressions_raster_file + ".tif"
+        with rasterio.open(depressions_tif) as deps_src:
+            deps_bounds = deps_src.bounds
+
+        # Make sure that the hydrofabric raster is aligned with the depression raster
+        subprocess.run([
+            "gdalwarp",
+            "-r", "near",
+            "-overwrite",
+            "-tr", "5", "5",
+            "-te",
+            str(deps_bounds.left),
+            str(deps_bounds.bottom),
+            str(deps_bounds.right),
+            str(deps_bounds.top),
+            state.CLRH_RASTER_FILE + ".tif",
+            state.CLRH_RASTER_FILE + "_aligned" + ".tif"
+        ], check=True)
+
+        # Calculate zonal statistics for depression raster
+        wbt.zonal_statistics(
+            i=depressions_tif,
+            features=state.CLRH_RASTER_FILE + "_aligned" + ".tif",
+            stat="total",
+            out_table=state.ZONAL_STATS_FILE
+        )
+
+        # Read zonal stats html as pandas df
+        zonal_stats_df = pd.read_html(state.ZONAL_STATS_FILE,
+                                    flavor='bs4')[0]
+
+        # Calculate depression depths (mm) and add field to gdf
+        clrh_gdf_projected_lidar['Deps_Depth_mm'] = zonal_stats_df['Mean'] * 1000
+
+        # Calculate depression volumes (m3) and add field to gdf
+        clrh_gdf_projected_lidar['Deps_Vol_m3'] = clrh_gdf_projected_lidar['Deps_Depth_mm']*clrh_gdf_projected_lidar['BasArea']
+
+        # Write geodataframe to file for use in raven input file creation
+        clrh_gdf_projected_lidar.to_file(state.DEPRESSION_DEPTHS_FILE + ".shp")
+    finally:
+        # Return to original working directory
+        os.chdir(original_dir)
 
     state.LAST_FUNCTION_RUN = "calc_depression_depths"
     save_state()
@@ -739,7 +769,7 @@ def calc_depression_depths(clrh_proj_lidar_file,
 
 
 def gen_wetland_polygons(depressions_raster_file):
-    print("Starting gen_wetland_polygons()...")
+    logger.info("Starting gen_wetland_polygons()...")
 
     # Load the depression depths raster
     with rasterio.open(depressions_raster_file + ".tif") as src:
@@ -831,7 +861,7 @@ def gen_wetland_polygons(depressions_raster_file):
     state.WETLANDS_POLYGONS_SHAPEFILE = state.HYDROCON_PROCESSED_PATH + "Wetlands_Polygons_with_Stats.shp"
     gdf.to_file(state.WETLANDS_POLYGONS_SHAPEFILE)
 
-    print("Inside gen_wetland_polygons(): Wetland polygons have been generated and saved to: ", state.WETLANDS_POLYGONS_SHAPEFILE)
+    logger.info("Inside gen_wetland_polygons(): wetland polygons saved to %s", state.WETLANDS_POLYGONS_SHAPEFILE)
 
     state.LAST_FUNCTION_RUN = "gen_wetland_polygons"
     save_state()
@@ -841,7 +871,7 @@ def gen_wetland_polygons(depressions_raster_file):
 
 
 def merge_rasters(lidar_files, gdf):
-    print("Starting merge_rasters()....")
+    logger.info("Starting merge_rasters()....")
     
     # Turn string input into list
     LIDAR_FILENAMES_LIST = [f for f in lidar_files]
@@ -901,7 +931,7 @@ def merge_rasters(lidar_files, gdf):
                         **out_meta) as dest:
             dest.write(out_image)
 
-    print("Inside merge_rasters(): Each raster has been clipped to subbasins shapefile.")
+    logger.info("Inside merge_rasters(): each raster clipped to subbasins shapefile.")
 
     # 2. Find the CRS for the highest resolution raster
     
@@ -928,7 +958,7 @@ def merge_rasters(lidar_files, gdf):
     with rasterio.open(highest_res_path) as ref_src:
         target_crs = ref_src.crs
 
-    print("Inside merge_rasters(): The CRS for the highest resolution raster has been found.")
+    logger.info("Inside merge_rasters(): CRS for highest-resolution raster found.")
 
     # 3. Project all rasters to the CRS of the highest resolution raster
 
@@ -984,15 +1014,15 @@ def merge_rasters(lidar_files, gdf):
                 reprojected_paths.append(out_path)
 
                 # Print confirmation message
-                print(f"Raster {path} reprojected to {target_crs} and saved as {out_path}.")
+                logger.info("Raster %s reprojected to %s, saved as %s", path, target_crs, out_path)
             else:
                 # Print message if no reprojection is needed
-                print(f"Raster {path} is already in the target CRS. No reprojection needed.")
+                logger.info("Raster %s already in target CRS; no reprojection needed.", path)
 
                 # Append the original path to the list of reprojected paths
                 reprojected_paths.append(path)
                 
-    print("Inside merge_rasters(): All rasters have been projected to the CRS of the highest-resolution raster.")
+    logger.info("Inside merge_rasters(): all rasters projected to the highest-resolution raster's CRS.")
     
     # 4. Merge all rasters together
 
@@ -1026,7 +1056,7 @@ def merge_rasters(lidar_files, gdf):
     # Close the virtual raster to free up space
     vrt = None
 
-    print("Inside merge_rasters(): Input rasters have been merged. Next step is to fill in the gaps.")
+    logger.info("Inside merge_rasters(): input rasters merged; next step fills in gaps.")
     
     # 5. Fill in gaps in merged raster
 
@@ -1110,17 +1140,23 @@ def merge_rasters(lidar_files, gdf):
     # Rename lidar filename variable
     state.LIDAR_FILENAME_NEW = state.LIDAR_FILENAME_NEW + "_filled"
 
-    print("Inside merge_rasters(): The gaps have been filled.")
-    print("merge_rasters() has ended.")
+    logger.info("Inside merge_rasters(): gaps filled.")
+    logger.info("merge_rasters() has ended.")
     return state.LIDAR_FILENAME_NEW
                   
 
 #--------------------RECOVERY FUNCTIONS------------------------
 
-def recover_state(recovery_path = None, last_function_expected = state.LAST_FUNCTION_RUN):
+def recover_state(recovery_path = None, last_function_expected = None):
+    # The previous default `last_function_expected = state.LAST_FUNCTION_RUN`
+    # was evaluated at import time and froze whatever LAST_FUNCTION_RUN
+    # held then (typically None). Resolve it at call time instead so we
+    # check against the current value, not the import-time snapshot.
+    if last_function_expected is None:
+        last_function_expected = state.LAST_FUNCTION_RUN
 
     if state.LAST_FUNCTION_RUN != last_function_expected:
-        print(f"Last function was not the expected {last_function_expected}. Attempting to recover state from pickle file.")
+        logger.warning("Last function was not the expected '%s'. Attempting to recover state from pickle file.", last_function_expected)
         ## Recover dictionary from pickle file (for testing purposes)
         if recovery_path is None:
             recovery_path = input("State data not found in current session. Enter the recovery folder path to load from pickle file.")
@@ -1130,7 +1166,7 @@ def recover_state(recovery_path = None, last_function_expected = state.LAST_FUNC
             with open(pickle_file_path, 'rb') as f:
                 globals()["state"] = pickle.load(f)
 
-            print(f"State data loaded from: {pickle_file_path}")
+            logger.info("State data loaded from: %s", pickle_file_path)
             
         except FileNotFoundError:
             raise FileNotFoundError(f"Pickle file not found at: {pickle_file_path}")

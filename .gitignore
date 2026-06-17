@@ -8,3 +8,9 @@ pwa_tools/WBT/__pycache__/
 
 # Ignore whitebox
 WBT/
+
+# pytest
+.pytest_cache/
+
+# Local tooling config
+.gh_config/

@@ -4,11 +4,44 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pwa-tools"
-version = "1.1.2" # Reminder to update this version number as needed.
+version = "1.1.3" # Reminder to update this version number as needed.
 description = "Hydro conditioning tools for PWA workflows"
 readme = "README.md"
-requires-python = ">=3.8"
-dependencies = []
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "geopandas>=0.14",
+    "shapely>=2.0",
+    "scipy>=1.11",
+    "rasterio>=1.3",
+    "beautifulsoup4>=4.12",
+    "html5lib>=1.1",
+    "lxml>=4.9",
+    "pyyaml>=6.0",
+    "whitebox>=2.3.0",
+]
+# GDAL (osgeo) is required for merge_rasters but cannot be pip-installed.
+# Install via conda:  conda install -c conda-forge gdal
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "pytest-cov>=4",
+]
 
 [tool.setuptools]
 packages = ["pwa_tools"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+markers = [
+    "regression: end-to-end tests requiring real watershed data (skipped by default in dev)",
+    "integration: tests that exercise external binaries (Raven, WhiteboxTools, gdal)",
+    "slow: tests taking more than ~30 seconds (typically WBT or full-pipeline runs)",
+]
