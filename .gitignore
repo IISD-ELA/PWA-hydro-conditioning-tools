@@ -9,8 +9,12 @@ pwa_tools/WBT/__pycache__/
 # Ignore whitebox
 WBT/
 
-# pytest
+# pytest / coverage
 .pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # Local tooling config
 .gh_config/
