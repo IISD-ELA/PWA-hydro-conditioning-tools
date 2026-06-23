@@ -163,6 +163,81 @@ def test_fill_nodata_replaces_gaps(tmp_path: Path) -> None:
     assert np.all(center == pytest.approx(100.0)), "Filled values should match neighbors"
 
 
+def test_fill_nodata_edge_block_trims_buffer_to_window_size(tmp_path: Path) -> None:
+    """A nodata gap touching a *block edge* must be filled and the
+    written window must match the original block's geometry (not the
+    buffered read window).
+
+    The implementation reads a *buffered* window — the original block
+    plus ``buffer_px`` pixels on each side — so the
+    distance-transform can see neighbours across block boundaries
+    and reach into a gap that sits exactly at an edge. Before
+    writing, the buffer must be trimmed back to the original window.
+
+    A previous version of this function trimmed by computing
+    ``data[buffer_px : buffer_px + height, ...]`` — which is wrong
+    at the *top* and *left* edges of the raster, where the buffer
+    gets clipped to 0 and the offset is no longer ``buffer_px``.
+    The current implementation tracks the true offset via
+    ``row_off - buffered_window.row_off`` and trims correctly. This
+    test exercises both edges (top-left corner block touches
+    raster origin) and the no-gap fast path's matching trim logic.
+
+    Without this test, an edge-trim regression would manifest as
+    shifted or duplicated rows in the output and silently corrupt
+    every downstream depression-detection step — but only on the
+    boundary rows/cols of a tiled raster, which fixture data with
+    a single window never exercises."""
+    # 32x32 raster, blocks of 16 → 4 blocks total, two of which touch
+    # the top edge (row_off == 0). Profile must opt in to tiled
+    # blocks so block_windows() returns more than one window.
+    nodata = -9999.0
+    data = np.ones((1, 32, 32), dtype=np.float32) * 100.0
+    # Gap at the very top-left corner: forces the no-gap fast path
+    # for some blocks and the slow path for the corner block.
+    data[0, 0:3, 0:3] = nodata
+    # And a strip of unique values along the right edge so a wrong
+    # trim offset would write the wrong columns and we'd notice.
+    data[0, :, 31] = 42.0
+
+    input_path = tmp_path / "edge_gap.tif"
+    transform = from_bounds(0, 0, 32, 32, 32, 32)
+    with rasterio.open(
+        input_path,
+        "w",
+        driver="GTiff",
+        height=32,
+        width=32,
+        count=1,
+        dtype=data.dtype,
+        crs="EPSG:4326",
+        transform=transform,
+        nodata=nodata,
+        tiled=True,
+        blockxsize=16,
+        blockysize=16,
+    ) as dst:
+        dst.write(data)
+
+    output_path = tmp_path / "edge_filled.tif"
+    fill_nodata_gaps(input_path, output_path, buffer_px=4)
+
+    with rasterio.open(output_path) as src:
+        filled = src.read(1)
+
+    # Corner gap is gone
+    assert not np.any(filled[0:3, 0:3] == nodata), (
+        "Top-left corner gap not filled"
+    )
+    # Right-edge strip preserved at the right column index — wrong
+    # trim offset would shift it left and this would fail
+    assert np.all(filled[:, 31] == pytest.approx(42.0)), (
+        "Right edge column shifted — edge-block trim is mis-offset"
+    )
+    # And the body unchanged
+    assert np.all(filled[5:30, 5:30] == pytest.approx(100.0))
+
+
 def test_fill_nodata_passthrough_when_no_gaps(tmp_path: Path) -> None:
     """A raster with no nodata should pass through unchanged."""
     data = np.arange(100, dtype=np.float32).reshape(1, 10, 10)

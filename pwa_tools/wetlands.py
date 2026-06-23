@@ -38,12 +38,20 @@ def gen_wetland_polygons(
     """Generate wetland polygons with area/volume/depth statistics from a depression raster.
 
     Steps:
-      1. Threshold the depression raster at 5 cm
+      1. Threshold the depression raster at ``_DEPTH_THRESHOLD_M``
+         (currently 0.1 m = 10 cm; ignores shallower depressions)
       2. Label connected components (8-connectivity)
       3. Compute per-wetland area, total storage volume, and median depth
-      4. Filter by area >= 100 m² and volume >= 30 m³
+      4. Filter by area >= ``_AREA_THRESHOLD_M2`` (currently 4000 m²)
+         and volume >= ``_VOLUME_THRESHOLD_M3`` (currently 30 m³)
       5. Vectorize remaining polygons
       6. Write stats CSV + shapefile
+
+    Threshold constants live at module level so the live values are
+    the source of truth; the step descriptions above reference the
+    constants by name (not by literal value) to avoid the docstring
+    silently drifting from the implementation when a default
+    changes. See ``test_wetlands_docstring_cites_live_constants``.
 
     Returns (shapefile_path, wetlands_gdf).
     """

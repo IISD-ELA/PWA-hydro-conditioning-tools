@@ -30,8 +30,15 @@ dev = [
     "pytest-cov>=4",
 ]
 
-[tool.setuptools]
-packages = ["pwa_tools"]
+# Auto-discover all pwa_tools.* subpackages (io, raven, etc.) so they
+# end up in the wheel. The previous explicit ``packages = ["pwa_tools"]``
+# silently excluded pwa_tools/io and pwa_tools/WBT — non-editable
+# installs (e.g. from a built wheel) then crashed on
+# ``from pwa_tools.runner import run_step0`` with ModuleNotFoundError
+# because runner.py imports pwa_tools.io.*. Editable installs masked
+# this because they walk the source tree directly.
+[tool.setuptools.packages.find]
+include = ["pwa_tools*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
