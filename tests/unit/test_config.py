@@ -188,6 +188,21 @@ def test_config_is_frozen(tmp_path: Path) -> None:
         config.watershed_name = "renamed"  # type: ignore[misc]
 
 
+def test_config_output_res_m_defaults_to_5(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    assert config.output_res_m == 5.0
+
+
+def test_config_output_res_m_loaded_from_dict(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path, output_res_m=3.0))
+    assert config.output_res_m == 3.0
+
+
+def test_config_output_res_m_roundtrips_via_to_dict(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path, output_res_m=10.0))
+    assert PwaConfig.from_dict(config.to_dict()).output_res_m == 10.0
+
+
 # ============ Input-file validation ============
 
 
