@@ -116,8 +116,8 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     else:
         lidar_clipped = lidar_path
 
-    # 6. Resample to 5m resolution
-    lidar_resampled = resample_lidar_raster(lidar_clipped, resolution_m=5)
+    # 6. Resample to 2m resolution for processing
+    lidar_resampled = resample_lidar_raster(lidar_clipped, resolution_m=2)
 
     # 7. Load NHN streams shapefile
     nhn_path = config.paths.hydrocon_raw / f"{config.inputs.nhn_filename}.shp"
@@ -148,6 +148,11 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     )
     depression_raster = gen_depressions_raster(
         lidar_resampled, nhn_clipped_path, depression_output,
+    )
+
+    # 10b. Resample depression raster to output resolution
+    depression_raster = resample_lidar_raster(
+        depression_raster, resolution_m=config.output_res_m,
     )
 
     # 11. Optional: generate wetland polygons

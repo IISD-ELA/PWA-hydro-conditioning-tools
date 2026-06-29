@@ -134,10 +134,13 @@ class PwaConfig:
     watershed_name: str
     paths: PwaPaths
     inputs: PwaInputs
+    output_res_m: float = 5.0
 
     def __post_init__(self) -> None:
         if not self.watershed_name:
             raise ValueError("watershed_name is required")
+        if self.output_res_m <= 0:
+            raise ValueError(f"output_res_m must be positive, got: {self.output_res_m}")
 
     @classmethod
     def from_dict(cls, data: dict) -> "PwaConfig":
@@ -166,7 +169,8 @@ class PwaConfig:
             crs_string=inputs_data["crs_string"],
             culvert_filename=culvert,
         )
-        return cls(watershed_name=watershed_name, paths=paths, inputs=inputs)
+        output_res_m = float(data.get("output_res_m", 5.0))
+        return cls(watershed_name=watershed_name, paths=paths, inputs=inputs, output_res_m=output_res_m)
 
     @classmethod
     def from_yaml(cls, config_path: Path) -> "PwaConfig":
@@ -252,6 +256,7 @@ class PwaConfig:
         return {
             "watershed_name": self.watershed_name,
             "base_data_dir": str(self.paths.base_data),
+            "output_res_m": self.output_res_m,
             "inputs": {
                 "clrh_filename": self.inputs.clrh_filename,
                 "lidar_filenames": list(self.inputs.lidar_filenames),
