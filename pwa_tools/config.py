@@ -135,6 +135,11 @@ class PwaConfig:
     paths: PwaPaths
     inputs: PwaInputs
     output_res_m: float = 5.0
+    # Wetland filter thresholds — override in config YAML to suit the dataset.
+    # Defaults match the module-level constants in pwa_tools.wetlands.
+    depth_llim: float = 0.1    # minimum depression depth (m)
+    area_llim: float = 4000.0  # minimum wetland area (m²)
+    volume_llim: float = 30.0  # minimum wetland storage volume (m³)
 
     def __post_init__(self) -> None:
         if not self.watershed_name:
@@ -170,7 +175,18 @@ class PwaConfig:
             culvert_filename=culvert,
         )
         output_res_m = float(data.get("output_res_m", 5.0))
-        return cls(watershed_name=watershed_name, paths=paths, inputs=inputs, output_res_m=output_res_m)
+        depth_llim = float(data.get("depth_llim", 0.1))
+        area_llim = float(data.get("area_llim", 4000.0))
+        volume_llim = float(data.get("volume_llim", 30.0))
+        return cls(
+            watershed_name=watershed_name,
+            paths=paths,
+            inputs=inputs,
+            output_res_m=output_res_m,
+            depth_llim=depth_llim,
+            area_llim=area_llim,
+            volume_llim=volume_llim,
+        )
 
     @classmethod
     def from_yaml(cls, config_path: Path) -> "PwaConfig":
@@ -365,6 +381,9 @@ class PwaConfig:
             "watershed_name": self.watershed_name,
             "base_data_dir": str(self.paths.base_data),
             "output_res_m": self.output_res_m,
+            "depth_llim": self.depth_llim,
+            "area_llim": self.area_llim,
+            "volume_llim": self.volume_llim,
             "inputs": {
                 "clrh_filename": self.inputs.clrh_filename,
                 "lidar_filenames": list(self.inputs.lidar_filenames),
