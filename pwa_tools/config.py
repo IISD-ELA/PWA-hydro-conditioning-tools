@@ -140,6 +140,9 @@ class PwaConfig:
     depth_llim: float = 0.1    # minimum depression depth (m)
     area_llim: float = 4000.0  # minimum wetland area (m²)
     volume_llim: float = 30.0  # minimum wetland storage volume (m³)
+    # Optional shared DEM directory — LiDAR files are read directly from here
+    # and are never staged/moved into hydrocon_raw.
+    dem_source_dir: Optional[Path] = None
 
     def __post_init__(self) -> None:
         if not self.watershed_name:
@@ -178,6 +181,8 @@ class PwaConfig:
         depth_llim = float(data.get("depth_llim", 0.1))
         area_llim = float(data.get("area_llim", 4000.0))
         volume_llim = float(data.get("volume_llim", 30.0))
+        dem_source_dir_raw = data.get("dem_source_dir")
+        dem_source_dir = Path(dem_source_dir_raw) if dem_source_dir_raw else None
         return cls(
             watershed_name=watershed_name,
             paths=paths,
@@ -186,6 +191,7 @@ class PwaConfig:
             depth_llim=depth_llim,
             area_llim=area_llim,
             volume_llim=volume_llim,
+            dem_source_dir=dem_source_dir,
         )
 
     @classmethod
@@ -196,6 +202,19 @@ class PwaConfig:
         with open(config_path) as f:
             data = yaml.safe_load(f)
         return cls.from_dict(data)
+
+    @property
+    def lidar_dir(self) -> Path:
+        """Source directory for LiDAR ``.tif`` files.
+
+        Returns ``dem_source_dir`` when specified; otherwise falls back to
+        ``paths.hydrocon_raw``.  LiDAR files are always read directly from
+        this directory and are never moved or copied into the watershed
+        hierarchy.
+        """
+        if self.dem_source_dir is not None:
+            return self.dem_source_dir
+        return self.paths.hydrocon_raw
 
     def expected_input_files(self) -> list[Path]:
         """Paths the pipeline expects to find on disk before run_step0 starts.
@@ -209,7 +228,7 @@ class PwaConfig:
         files: list[Path] = []
         files.append(raw / f"{self.inputs.clrh_filename}.shp")
         for name in self.inputs.lidar_filenames:
-            files.append(raw / f"{name}.tif")
+            files.append(self.lidar_dir / f"{name}.tif")
         files.append(raw / f"{self.inputs.nhn_filename}.shp")
         if self.inputs.culvert_filename:
             files.append(raw / f"{self.inputs.culvert_filename}.shp")
@@ -282,6 +301,35 @@ class PwaConfig:
             raise FileNotFoundError(msg)
 
         self.paths.make_dirs()
+
+        # When dem_source_dir is configured, validate it early — fail fast
+        # before any expensive pipeline work.
+        if self.dem_source_dir is not None:
+            if not self.dem_source_dir.is_dir():
+                logger.error(
+                    "dem_source_dir does not exist: %s", self.dem_source_dir
+                )
+                raise FileNotFoundError(
+                    f"dem_source_dir does not exist: {self.dem_source_dir}\n"
+                    "Check the 'dem_source_dir' path in your config."
+                )
+            missing_lidar = [
+                f"{name}.tif"
+                for name in self.inputs.lidar_filenames
+                if not (self.dem_source_dir / f"{name}.tif").is_file()
+            ]
+            if missing_lidar:
+                bullet_list = "\n  - ".join(missing_lidar)
+                logger.error(
+                    "LiDAR files missing from dem_source_dir %s: %s",
+                    self.dem_source_dir, missing_lidar,
+                )
+                raise FileNotFoundError(
+                    "Step 0 cannot start; the following LiDAR files are missing "
+                    f"from dem_source_dir ({self.dem_source_dir}):\n  - {bullet_list}\n"
+                    "Place them in dem_source_dir or fix the filenames in your config."
+                )
+
         raw = self.paths.hydrocon_raw
         search_dirs = self._input_search_dirs()
         missing: list[str] = []
@@ -384,6 +432,7 @@ class PwaConfig:
             "depth_llim": self.depth_llim,
             "area_llim": self.area_llim,
             "volume_llim": self.volume_llim,
+            "dem_source_dir": str(self.dem_source_dir) if self.dem_source_dir is not None else None,
             "inputs": {
                 "clrh_filename": self.inputs.clrh_filename,
                 "lidar_filenames": list(self.inputs.lidar_filenames),
