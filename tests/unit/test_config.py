@@ -573,3 +573,50 @@ def test_to_yaml_creates_parent_dir(tmp_path: Path) -> None:
     out = tmp_path / "deeply" / "nested" / "pwa_config.yml"
     config.to_yaml(out)
     assert out.is_file()
+
+
+# ============ Wetland threshold fields ============
+
+
+def test_config_wetland_thresholds_default_to_known_values(tmp_path: Path) -> None:
+    """When omitted from the config dict the thresholds must equal the known
+    default values (0.1 m depth, 4000 m² area, 30 m³ volume) that match the
+    module-level constants in pwa_tools.wetlands."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    assert config.depth_llim == 0.1
+    assert config.area_llim == 4000.0
+    assert config.volume_llim == 30.0
+
+
+def test_config_wetland_thresholds_loaded_from_dict(tmp_path: Path) -> None:
+    """Custom threshold values supplied in the config dict must be stored as-is."""
+    config = PwaConfig.from_dict(
+        _config_dict(tmp_path, depth_llim=0.05, area_llim=1000.0, volume_llim=15.0)
+    )
+    assert config.depth_llim == 0.05
+    assert config.area_llim == 1000.0
+    assert config.volume_llim == 15.0
+
+
+def test_config_wetland_thresholds_roundtrip_via_to_dict(tmp_path: Path) -> None:
+    """Custom thresholds survive a to_dict() → from_dict() round-trip."""
+    original = PwaConfig.from_dict(
+        _config_dict(tmp_path, depth_llim=0.2, area_llim=500.0, volume_llim=5.0)
+    )
+    rebuilt = PwaConfig.from_dict(original.to_dict())
+    assert rebuilt.depth_llim == 0.2
+    assert rebuilt.area_llim == 500.0
+    assert rebuilt.volume_llim == 5.0
+
+
+def test_config_wetland_thresholds_roundtrip_via_yaml(tmp_path: Path) -> None:
+    """Custom thresholds survive a to_yaml() → from_yaml() round-trip."""
+    original = PwaConfig.from_dict(
+        _config_dict(tmp_path, depth_llim=0.15, area_llim=2000.0, volume_llim=20.0)
+    )
+    out = tmp_path / "pwa_config.yml"
+    original.to_yaml(out)
+    rebuilt = PwaConfig.from_yaml(out)
+    assert rebuilt.depth_llim == 0.15
+    assert rebuilt.area_llim == 2000.0
+    assert rebuilt.volume_llim == 20.0
