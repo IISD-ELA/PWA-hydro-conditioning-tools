@@ -199,6 +199,114 @@ class PwaConfig:
             files.append(raw / f"{self.inputs.culvert_filename}.shp")
         return files
 
+    def _input_search_dirs(self) -> list[Path]:
+        """Ordered list of directories to search when staging raw inputs.
+
+        Search order (each directory is checked flat — not recursively):
+        1. ``hydrocon_raw`` — files already in place, nothing to move.
+        2. Every subdirectory of the watershed folder (at any depth) whose
+           **name** contains ``"condition"`` or ``"data"`` (lower-cased for
+           comparison).
+        3. The watershed folder root.
+        4. ``base_data_dir`` root.
+        """
+        dirs: list[Path] = [self.paths.hydrocon_raw]
+        watershed = self.paths.watershed
+        if watershed.is_dir():
+            for d in sorted(watershed.rglob("*")):
+                if d.is_dir():
+                    name_lower = d.name.lower()
+                    if "condition" in name_lower or "data" in name_lower:
+                        if d not in dirs:
+                            dirs.append(d)
+        if watershed not in dirs:
+            dirs.append(watershed)
+        if self.paths.base_data not in dirs:
+            dirs.append(self.paths.base_data)
+        return dirs
+
+    def stage_inputs(self) -> None:
+        """Search the data hierarchy for raw inputs and move them into Raw/.
+
+        For each expected input file the method walks the search directories
+        returned by :meth:`_input_search_dirs`.  Files already present in
+        ``hydrocon_raw`` are left untouched.  Files found elsewhere are moved
+        to ``hydrocon_raw``; for shapefiles (``.shp``) every sidecar sharing
+        the same stem (e.g. ``.dbf``, ``.shx``, ``.prj``, ``.cpg``) is moved
+        alongside.
+
+        Raises :exc:`FileNotFoundError` if the watershed directory does not
+        exist (surfaces sibling directories so the user can spot a typo) or if
+        one or more expected files cannot be located anywhere in the hierarchy.
+        """
+        watershed = self.paths.watershed
+        if not watershed.is_dir():
+            siblings = []
+            base = self.paths.base_data
+            if base.is_dir():
+                siblings = sorted(p.name for p in base.iterdir() if p.is_dir())
+            msg = (
+                "Step 0 cannot start; the watershed directory is missing:"
+                f"\n  {watershed}\n"
+            )
+            if siblings:
+                sibling_list = "\n  - ".join(siblings)
+                msg += (
+                    f"\nAvailable directories in {base}:\n"
+                    f"  - {sibling_list}\n"
+                    "\nIf one of these is the watershed you meant, either "
+                    "update 'watershed_name' in your config or rename the "
+                    "on-disk directory to match."
+                )
+            else:
+                msg += (
+                    f"\nThe parent directory {base} doesn't exist or has no "
+                    "subdirectories. Check 'base_data_dir' in your config."
+                )
+            raise FileNotFoundError(msg)
+
+        self.paths.make_dirs()
+        raw = self.paths.hydrocon_raw
+        search_dirs = self._input_search_dirs()
+        missing: list[str] = []
+
+        for expected in self.expected_input_files():
+            if expected.is_file():
+                continue  # already staged
+
+            found: Path | None = None
+            for search_dir in search_dirs:
+                candidate = search_dir / expected.name
+                if candidate.is_file():
+                    found = candidate
+                    break
+
+            if found is None:
+                missing.append(expected.name)
+                continue
+
+            # Move the primary file to Raw/
+            dest = raw / expected.name
+            shutil.move(str(found), dest)
+            logger.info("Staged %s -> %s", found, dest)
+
+            # For shapefiles, carry sidecars from the same source directory
+            if expected.suffix.lower() == ".shp":
+                stem = expected.stem
+                for sidecar in found.parent.glob(f"{stem}.*"):
+                    if sidecar.suffix.lower() != ".shp" and sidecar.is_file():
+                        shutil.move(str(sidecar), raw / sidecar.name)
+                        logger.info("Staged sidecar %s -> %s", sidecar, raw / sidecar.name)
+
+        if missing:
+            bullet_list = "\n  - ".join(missing)
+            raise FileNotFoundError(
+                "Step 0 cannot start; the following input files could not be "
+                f"found anywhere in the search hierarchy:\n  - {bullet_list}\n"
+                f"Place them under {watershed} (or fix the filenames in your "
+                "config) and re-run."
+            )
+
     def validate_inputs_exist(self) -> None:
         """Fail fast if expected input files are missing.
 
