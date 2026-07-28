@@ -160,7 +160,11 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     wetlands_path = None
     if generate_wetlands:
         wetlands_path, _wetlands_gdf = gen_wetland_polygons(
-            depression_raster, config.paths.hydrocon_processed,
+            depression_raster,
+            config.paths.hydrocon_processed,
+            depth_llim=config.depth_llim,
+            area_llim=config.area_llim,
+            volume_llim=config.volume_llim,
         )
 
     # 12. Calculate depression depths per subbasin
