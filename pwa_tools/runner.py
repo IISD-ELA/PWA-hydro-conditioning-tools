@@ -90,16 +90,17 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     clrh_gdf = read_shapefile(clrh_path, target_crs=config.inputs.crs_string)
     logger.info("Loaded CLRH subbasins: %d features", len(clrh_gdf))
 
-    # 3. LiDAR DEM — merge if multiple rasters, otherwise use raw
+    # 3. LiDAR DEM — use dem_source_dir if configured, else hydrocon_raw
+    lidar_source = config.lidar_dir
     if config.inputs.multiple_lidar_rasters:
         lidar_path = merge_rasters(
             config.inputs.lidar_filenames,
             clrh_gdf,
-            config.paths.hydrocon_raw,
+            lidar_source,
             config.paths.hydrocon_interim,
         )
     else:
-        lidar_path = config.paths.hydrocon_raw / f"{config.inputs.lidar_filenames[0]}.tif"
+        lidar_path = lidar_source / f"{config.inputs.lidar_filenames[0]}.tif"
 
     # 4. Project subbasins to LiDAR CRS
     clrh_projected, lidar_crs, crs_tag, clrh_proj_path = project_subbasins_to_lidar(
