@@ -72,9 +72,10 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     """
     logger.info("Starting Step 0 for watershed '%s'", config.watershed_name)
 
-    # 0. Fail fast if expected input files are missing — saves the user
-    #    from a 5-minute LiDAR resample crashing on a missing shapefile.
-    config.validate_inputs_exist()
+    # 0. Search the data hierarchy for input files, move them to Raw/,
+    #    and fail fast if any are missing — saves the user from a
+    #    5-minute LiDAR resample crashing on a missing shapefile.
+    config.stage_inputs()
 
     # 1. Create directory structure
     config.paths.make_dirs()
