@@ -250,6 +250,21 @@ def test_config_output_res_m_roundtrips_via_to_dict(tmp_path: Path) -> None:
     assert PwaConfig.from_dict(config.to_dict()).output_res_m == 10.0
 
 
+def test_config_processing_res_m_defaults_to_2(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    assert config.processing_res_m == 2.0
+
+
+def test_config_processing_res_m_loaded_from_dict(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path, processing_res_m=5.0))
+    assert config.processing_res_m == 5.0
+
+
+def test_config_processing_res_m_roundtrips_via_to_dict(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path, processing_res_m=4.0))
+    assert PwaConfig.from_dict(config.to_dict()).processing_res_m == 4.0
+
+
 # ============ Input-file validation ============
 
 
@@ -372,6 +387,153 @@ def test_validate_inputs_exist_per_file_message_unchanged_when_dir_present(
     assert "Available directories" not in msg
 
 
+# ============ stage_inputs ============
+
+
+def _place_file(directory: Path, filename: str, sidecars: bool = False) -> None:
+    """Create a placeholder file (and optional shapefile sidecars) in *directory*."""
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / filename).touch()
+    if sidecars and filename.endswith(".shp"):
+        stem = filename[:-4]
+        for ext in (".dbf", ".shx", ".prj"):
+            (directory / f"{stem}{ext}").touch()
+
+
+def test_stage_inputs_noop_when_files_already_in_raw(tmp_path: Path) -> None:
+    """Files already in Raw/ are left in place without error."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    config.paths.make_dirs()
+    for p in config.expected_input_files():
+        p.touch()
+
+    config.stage_inputs()
+
+    for p in config.expected_input_files():
+        assert p.is_file()
+
+
+def test_stage_inputs_moves_files_from_data_subdir(tmp_path: Path) -> None:
+    """Files dropped in a subdirectory with 'data' in its name are moved to Raw/."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    config.paths.make_dirs()
+    source_dir = config.paths.watershed / "Raw_Data"
+    _place_file(source_dir, "finalcat_info_v1-0.shp")
+    _place_file(source_dir, "Pembina_LiDAR_DEM.tif")
+    _place_file(source_dir, "NHN_05MH000_3_0_HD_SLWATER_1.shp")
+
+    config.stage_inputs()
+
+    for p in config.expected_input_files():
+        assert p.is_file(), f"Expected {p} in Raw/ after staging"
+
+
+def test_stage_inputs_moves_files_from_conditioning_subdir(tmp_path: Path) -> None:
+    """Files dropped in a subdirectory with 'condition' in its name are moved to Raw/."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    config.paths.make_dirs()
+    source_dir = config.paths.watershed / "HydroConditioning"
+    _place_file(source_dir, "finalcat_info_v1-0.shp")
+    _place_file(source_dir, "Pembina_LiDAR_DEM.tif")
+    _place_file(source_dir, "NHN_05MH000_3_0_HD_SLWATER_1.shp")
+
+    config.stage_inputs()
+
+    for p in config.expected_input_files():
+        assert p.is_file(), f"Expected {p} in Raw/ after staging"
+
+
+def test_stage_inputs_keyword_match_is_case_insensitive(tmp_path: Path) -> None:
+    """'DATA', 'Condition', 'CONDITIONING' etc. all match regardless of case."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    config.paths.make_dirs()
+    # Mixed-case names — matching is done on .lower()
+    source_dir = config.paths.watershed / "CONDITIONING_Inputs"
+    _place_file(source_dir, "finalcat_info_v1-0.shp")
+    _place_file(source_dir, "Pembina_LiDAR_DEM.tif")
+    _place_file(source_dir, "NHN_05MH000_3_0_HD_SLWATER_1.shp")
+
+    config.stage_inputs()
+
+    for p in config.expected_input_files():
+        assert p.is_file()
+
+
+def test_stage_inputs_moves_files_from_watershed_root(tmp_path: Path) -> None:
+    """Files dropped directly in the watershed folder are moved to Raw/."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    config.paths.make_dirs()
+    source_dir = config.paths.watershed
+    _place_file(source_dir, "finalcat_info_v1-0.shp")
+    _place_file(source_dir, "Pembina_LiDAR_DEM.tif")
+    _place_file(source_dir, "NHN_05MH000_3_0_HD_SLWATER_1.shp")
+
+    config.stage_inputs()
+
+    for p in config.expected_input_files():
+        assert p.is_file()
+
+
+def test_stage_inputs_moves_files_from_base_data_dir(tmp_path: Path) -> None:
+    """Files dropped in base_data_dir root are moved to Raw/."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    config.paths.make_dirs()
+    _place_file(tmp_path, "finalcat_info_v1-0.shp")
+    _place_file(tmp_path, "Pembina_LiDAR_DEM.tif")
+    _place_file(tmp_path, "NHN_05MH000_3_0_HD_SLWATER_1.shp")
+
+    config.stage_inputs()
+
+    for p in config.expected_input_files():
+        assert p.is_file()
+
+
+def test_stage_inputs_moves_shapefile_sidecars(tmp_path: Path) -> None:
+    """When a .shp is moved from a search dir, its .dbf/.shx/.prj sidecars travel with it."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    config.paths.make_dirs()
+    source_dir = config.paths.watershed / "Raw_Data"
+    _place_file(source_dir, "finalcat_info_v1-0.shp", sidecars=True)
+    _place_file(source_dir, "Pembina_LiDAR_DEM.tif")
+    _place_file(source_dir, "NHN_05MH000_3_0_HD_SLWATER_1.shp", sidecars=True)
+
+    config.stage_inputs()
+
+    raw = config.paths.hydrocon_raw
+    for sidecar in ("finalcat_info_v1-0.dbf", "finalcat_info_v1-0.shx",
+                    "finalcat_info_v1-0.prj", "NHN_05MH000_3_0_HD_SLWATER_1.dbf"):
+        assert (raw / sidecar).is_file(), f"Sidecar {sidecar} not found in Raw/"
+
+
+def test_stage_inputs_raises_when_files_not_found(tmp_path: Path) -> None:
+    """Files that cannot be found anywhere raise FileNotFoundError naming them."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    config.paths.make_dirs()
+    # Only place the NHN file — the other two are missing
+    (config.paths.hydrocon_raw / "NHN_05MH000_3_0_HD_SLWATER_1.shp").touch()
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        config.stage_inputs()
+
+    msg = str(exc_info.value)
+    assert "finalcat_info_v1-0.shp" in msg
+    assert "Pembina_LiDAR_DEM.tif" in msg
+    assert "NHN_05MH000_3_0_HD_SLWATER_1.shp" not in msg
+
+
+def test_stage_inputs_raises_when_watershed_dir_missing(tmp_path: Path) -> None:
+    """When the watershed directory doesn't exist, surface sibling dir names."""
+    (tmp_path / "other_watershed").mkdir()
+    config = PwaConfig.from_dict(_config_dict(tmp_path))  # watershed_name=cypress_river
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        config.stage_inputs()
+
+    msg = str(exc_info.value)
+    assert "cypress_river" in msg
+    assert "other_watershed" in msg
+
+
 # ============ to_dict / to_yaml round-trip ============
 
 
@@ -426,3 +588,209 @@ def test_to_yaml_creates_parent_dir(tmp_path: Path) -> None:
     out = tmp_path / "deeply" / "nested" / "pwa_config.yml"
     config.to_yaml(out)
     assert out.is_file()
+
+
+# ============ Wetland threshold fields ============
+
+
+def test_config_wetland_thresholds_default_to_known_values(tmp_path: Path) -> None:
+    """When omitted from the config dict the thresholds must equal the known
+    default values (0.1 m depth, 4000 m² area, 30 m³ volume) that match the
+    module-level constants in pwa_tools.wetlands."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    assert config.depth_llim == 0.1
+    assert config.area_llim == 4000.0
+    assert config.volume_llim == 30.0
+
+
+def test_config_wetland_thresholds_loaded_from_dict(tmp_path: Path) -> None:
+    """Custom threshold values supplied in the config dict must be stored as-is."""
+    config = PwaConfig.from_dict(
+        _config_dict(tmp_path, depth_llim=0.05, area_llim=1000.0, volume_llim=15.0)
+    )
+    assert config.depth_llim == 0.05
+    assert config.area_llim == 1000.0
+    assert config.volume_llim == 15.0
+
+
+def test_config_wetland_thresholds_roundtrip_via_to_dict(tmp_path: Path) -> None:
+    """Custom thresholds survive a to_dict() → from_dict() round-trip."""
+    original = PwaConfig.from_dict(
+        _config_dict(tmp_path, depth_llim=0.2, area_llim=500.0, volume_llim=5.0)
+    )
+    rebuilt = PwaConfig.from_dict(original.to_dict())
+    assert rebuilt.depth_llim == 0.2
+    assert rebuilt.area_llim == 500.0
+    assert rebuilt.volume_llim == 5.0
+
+
+def test_config_wetland_thresholds_roundtrip_via_yaml(tmp_path: Path) -> None:
+    """Custom thresholds survive a to_yaml() → from_yaml() round-trip."""
+    original = PwaConfig.from_dict(
+        _config_dict(tmp_path, depth_llim=0.15, area_llim=2000.0, volume_llim=20.0)
+    )
+    out = tmp_path / "pwa_config.yml"
+    original.to_yaml(out)
+    rebuilt = PwaConfig.from_yaml(out)
+    assert rebuilt.depth_llim == 0.15
+    assert rebuilt.area_llim == 2000.0
+    assert rebuilt.volume_llim == 20.0
+
+
+# ============ dem_source_dir ============
+
+
+def test_dem_source_dir_defaults_to_none(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    assert config.dem_source_dir is None
+
+
+def test_lidar_dir_returns_hydrocon_raw_when_no_dem_source_dir(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    assert config.lidar_dir == config.paths.hydrocon_raw
+
+
+def test_lidar_dir_returns_dem_source_dir_when_set(tmp_path: Path) -> None:
+    dem_dir = tmp_path / "shared_dems"
+    config = PwaConfig.from_dict(_config_dict(tmp_path, dem_source_dir=str(dem_dir)))
+    assert config.lidar_dir == dem_dir
+
+
+def test_dem_source_dir_loaded_from_dict(tmp_path: Path) -> None:
+    dem_dir = tmp_path / "shared_dems"
+    config = PwaConfig.from_dict(_config_dict(tmp_path, dem_source_dir=str(dem_dir)))
+    assert config.dem_source_dir == dem_dir
+
+
+def test_dem_source_dir_absent_from_dict_gives_none(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    assert config.dem_source_dir is None
+
+
+def test_dem_source_dir_roundtrip_via_to_dict(tmp_path: Path) -> None:
+    dem_dir = tmp_path / "shared_dems"
+    original = PwaConfig.from_dict(_config_dict(tmp_path, dem_source_dir=str(dem_dir)))
+    rebuilt = PwaConfig.from_dict(original.to_dict())
+    assert rebuilt.dem_source_dir == dem_dir
+
+
+def test_dem_source_dir_none_roundtrips_via_to_dict(tmp_path: Path) -> None:
+    original = PwaConfig.from_dict(_config_dict(tmp_path))
+    rebuilt = PwaConfig.from_dict(original.to_dict())
+    assert rebuilt.dem_source_dir is None
+
+
+def test_dem_source_dir_roundtrip_via_yaml(tmp_path: Path) -> None:
+    dem_dir = tmp_path / "shared_dems"
+    original = PwaConfig.from_dict(_config_dict(tmp_path, dem_source_dir=str(dem_dir)))
+    out = tmp_path / "pwa_config.yml"
+    original.to_yaml(out)
+    rebuilt = PwaConfig.from_yaml(out)
+    assert rebuilt.dem_source_dir == dem_dir
+
+
+def test_expected_input_files_lidar_in_hydrocon_raw_when_no_dem_source_dir(
+    tmp_path: Path,
+) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    files = config.expected_input_files()
+    lidar_files = [f for f in files if f.suffix == ".tif"]
+    assert all(f.parent == config.paths.hydrocon_raw for f in lidar_files)
+
+
+def test_expected_input_files_lidar_in_dem_source_dir_when_set(tmp_path: Path) -> None:
+    dem_dir = tmp_path / "shared_dems"
+    config = PwaConfig.from_dict(_config_dict(tmp_path, dem_source_dir=str(dem_dir)))
+    files = config.expected_input_files()
+    lidar_files = [f for f in files if f.suffix == ".tif"]
+    assert lidar_files, "expected at least one .tif in expected_input_files"
+    assert all(f.parent == dem_dir for f in lidar_files)
+
+
+def test_expected_input_files_non_lidar_still_in_hydrocon_raw_when_dem_source_dir_set(
+    tmp_path: Path,
+) -> None:
+    dem_dir = tmp_path / "shared_dems"
+    config = PwaConfig.from_dict(_config_dict(tmp_path, dem_source_dir=str(dem_dir)))
+    files = config.expected_input_files()
+    shp_files = [f for f in files if f.suffix == ".shp"]
+    assert all(f.parent == config.paths.hydrocon_raw for f in shp_files)
+
+
+def test_stage_inputs_raises_when_dem_source_dir_does_not_exist(
+    tmp_path: Path,
+) -> None:
+    """stage_inputs must fail fast with a clear message if dem_source_dir is
+    missing entirely rather than silently falling back to staging the LiDAR."""
+    dem_dir = tmp_path / "nonexistent_dems"
+    config = PwaConfig.from_dict(_config_dict(tmp_path, dem_source_dir=str(dem_dir)))
+    config.paths.make_dirs()
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        config.stage_inputs()
+
+    msg = str(exc_info.value)
+    assert str(dem_dir) in msg
+
+
+def test_stage_inputs_raises_when_lidar_files_missing_from_dem_source_dir(
+    tmp_path: Path,
+) -> None:
+    """All named LiDAR files must be present in dem_source_dir; absent ones
+    are reported by name in the error message."""
+    dem_dir = tmp_path / "shared_dems"
+    dem_dir.mkdir()
+    # Place only the NHN/CLRH files in hydrocon_raw — do NOT place the LiDAR
+    config = PwaConfig.from_dict(_config_dict(tmp_path, dem_source_dir=str(dem_dir)))
+    config.paths.make_dirs()
+    (config.paths.hydrocon_raw / "finalcat_info_v1-0.shp").touch()
+    (config.paths.hydrocon_raw / "NHN_05MH000_3_0_HD_SLWATER_1.shp").touch()
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        config.stage_inputs()
+
+    msg = str(exc_info.value)
+    assert "Pembina_LiDAR_DEM.tif" in msg
+
+
+def test_stage_inputs_leaves_lidar_in_dem_source_dir(tmp_path: Path) -> None:
+    """When dem_source_dir is set and all LiDAR files are present there,
+    stage_inputs must NOT move them to hydrocon_raw."""
+    dem_dir = tmp_path / "shared_dems"
+    dem_dir.mkdir()
+    (dem_dir / "Pembina_LiDAR_DEM.tif").touch()
+
+    config = PwaConfig.from_dict(_config_dict(tmp_path, dem_source_dir=str(dem_dir)))
+    config.paths.make_dirs()
+    (config.paths.hydrocon_raw / "finalcat_info_v1-0.shp").touch()
+    (config.paths.hydrocon_raw / "NHN_05MH000_3_0_HD_SLWATER_1.shp").touch()
+
+    config.stage_inputs()
+
+    # LiDAR stays in dem_source_dir
+    assert (dem_dir / "Pembina_LiDAR_DEM.tif").is_file()
+    # LiDAR is NOT copied/moved to hydrocon_raw
+    assert not (config.paths.hydrocon_raw / "Pembina_LiDAR_DEM.tif").exists()
+
+
+def test_stage_inputs_still_stages_shapefiles_when_dem_source_dir_set(
+    tmp_path: Path,
+) -> None:
+    """Non-LiDAR files (CLRH, NHN) are still staged to hydrocon_raw even when
+    dem_source_dir is configured."""
+    dem_dir = tmp_path / "shared_dems"
+    dem_dir.mkdir()
+    (dem_dir / "Pembina_LiDAR_DEM.tif").touch()
+
+    config = PwaConfig.from_dict(_config_dict(tmp_path, dem_source_dir=str(dem_dir)))
+    config.paths.make_dirs()
+    # Place shapefiles in a search directory (not yet in hydrocon_raw)
+    source_dir = config.paths.watershed / "Raw_Data"
+    _place_file(source_dir, "finalcat_info_v1-0.shp")
+    _place_file(source_dir, "NHN_05MH000_3_0_HD_SLWATER_1.shp")
+
+    config.stage_inputs()
+
+    raw = config.paths.hydrocon_raw
+    assert (raw / "finalcat_info_v1-0.shp").is_file()
+    assert (raw / "NHN_05MH000_3_0_HD_SLWATER_1.shp").is_file()

@@ -135,12 +135,23 @@ class PwaConfig:
     paths: PwaPaths
     inputs: PwaInputs
     output_res_m: float = 5.0
+    processing_res_m: float = 2.0  # intermediate LiDAR resampling resolution
+    # Wetland filter thresholds — override in config YAML to suit the dataset.
+    # Defaults match the module-level constants in pwa_tools.wetlands.
+    depth_llim: float = 0.1    # minimum depression depth (m)
+    area_llim: float = 4000.0  # minimum wetland area (m²)
+    volume_llim: float = 30.0  # minimum wetland storage volume (m³)
+    # Optional shared DEM directory — LiDAR files are read directly from here
+    # and are never staged/moved into hydrocon_raw.
+    dem_source_dir: Optional[Path] = None
 
     def __post_init__(self) -> None:
         if not self.watershed_name:
             raise ValueError("watershed_name is required")
         if self.output_res_m <= 0:
             raise ValueError(f"output_res_m must be positive, got: {self.output_res_m}")
+        if self.processing_res_m <= 0:
+            raise ValueError(f"processing_res_m must be positive, got: {self.processing_res_m}")
 
     @classmethod
     def from_dict(cls, data: dict) -> "PwaConfig":
@@ -170,7 +181,23 @@ class PwaConfig:
             culvert_filename=culvert,
         )
         output_res_m = float(data.get("output_res_m", 5.0))
-        return cls(watershed_name=watershed_name, paths=paths, inputs=inputs, output_res_m=output_res_m)
+        processing_res_m = float(data.get("processing_res_m", 2.0))
+        depth_llim = float(data.get("depth_llim", 0.1))
+        area_llim = float(data.get("area_llim", 4000.0))
+        volume_llim = float(data.get("volume_llim", 30.0))
+        dem_source_dir_raw = data.get("dem_source_dir")
+        dem_source_dir = Path(dem_source_dir_raw) if dem_source_dir_raw else None
+        return cls(
+            watershed_name=watershed_name,
+            paths=paths,
+            inputs=inputs,
+            output_res_m=output_res_m,
+            processing_res_m=processing_res_m,
+            depth_llim=depth_llim,
+            area_llim=area_llim,
+            volume_llim=volume_llim,
+            dem_source_dir=dem_source_dir,
+        )
 
     @classmethod
     def from_yaml(cls, config_path: Path) -> "PwaConfig":
@@ -180,6 +207,19 @@ class PwaConfig:
         with open(config_path) as f:
             data = yaml.safe_load(f)
         return cls.from_dict(data)
+
+    @property
+    def lidar_dir(self) -> Path:
+        """Source directory for LiDAR ``.tif`` files.
+
+        Returns ``dem_source_dir`` when specified; otherwise falls back to
+        ``paths.hydrocon_raw``.  LiDAR files are always read directly from
+        this directory and are never moved or copied into the watershed
+        hierarchy.
+        """
+        if self.dem_source_dir is not None:
+            return self.dem_source_dir
+        return self.paths.hydrocon_raw
 
     def expected_input_files(self) -> list[Path]:
         """Paths the pipeline expects to find on disk before run_step0 starts.
@@ -193,11 +233,148 @@ class PwaConfig:
         files: list[Path] = []
         files.append(raw / f"{self.inputs.clrh_filename}.shp")
         for name in self.inputs.lidar_filenames:
-            files.append(raw / f"{name}.tif")
+            files.append(self.lidar_dir / f"{name}.tif")
         files.append(raw / f"{self.inputs.nhn_filename}.shp")
         if self.inputs.culvert_filename:
             files.append(raw / f"{self.inputs.culvert_filename}.shp")
         return files
+
+    def _input_search_dirs(self) -> list[Path]:
+        """Ordered list of directories to search when staging raw inputs.
+
+        Search order (each directory is checked flat — not recursively):
+        1. ``hydrocon_raw`` — files already in place, nothing to move.
+        2. Every subdirectory of the watershed folder (at any depth) whose
+           **name** contains ``"condition"`` or ``"data"`` (lower-cased for
+           comparison).
+        3. The watershed folder root.
+        4. ``base_data_dir`` root.
+        """
+        dirs: list[Path] = [self.paths.hydrocon_raw]
+        watershed = self.paths.watershed
+        if watershed.is_dir():
+            for d in sorted(watershed.rglob("*")):
+                if d.is_dir():
+                    name_lower = d.name.lower()
+                    if "condition" in name_lower or "data" in name_lower:
+                        if d not in dirs:
+                            dirs.append(d)
+        if watershed not in dirs:
+            dirs.append(watershed)
+        if self.paths.base_data not in dirs:
+            dirs.append(self.paths.base_data)
+        return dirs
+
+    def stage_inputs(self) -> None:
+        """Search the data hierarchy for raw inputs and move them into Raw/.
+
+        For each expected input file the method walks the search directories
+        returned by :meth:`_input_search_dirs`.  Files already present in
+        ``hydrocon_raw`` are left untouched.  Files found elsewhere are moved
+        to ``hydrocon_raw``; for shapefiles (``.shp``) every sidecar sharing
+        the same stem (e.g. ``.dbf``, ``.shx``, ``.prj``, ``.cpg``) is moved
+        alongside.
+
+        Raises :exc:`FileNotFoundError` if the watershed directory does not
+        exist (surfaces sibling directories so the user can spot a typo) or if
+        one or more expected files cannot be located anywhere in the hierarchy.
+        """
+        watershed = self.paths.watershed
+        if not watershed.is_dir():
+            siblings = []
+            base = self.paths.base_data
+            if base.is_dir():
+                siblings = sorted(p.name for p in base.iterdir() if p.is_dir())
+            msg = (
+                "Step 0 cannot start; the watershed directory is missing:"
+                f"\n  {watershed}\n"
+            )
+            if siblings:
+                sibling_list = "\n  - ".join(siblings)
+                msg += (
+                    f"\nAvailable directories in {base}:\n"
+                    f"  - {sibling_list}\n"
+                    "\nIf one of these is the watershed you meant, either "
+                    "update 'watershed_name' in your config or rename the "
+                    "on-disk directory to match."
+                )
+            else:
+                msg += (
+                    f"\nThe parent directory {base} doesn't exist or has no "
+                    "subdirectories. Check 'base_data_dir' in your config."
+                )
+            raise FileNotFoundError(msg)
+
+        self.paths.make_dirs()
+
+        # When dem_source_dir is configured, validate it early — fail fast
+        # before any expensive pipeline work.
+        if self.dem_source_dir is not None:
+            if not self.dem_source_dir.is_dir():
+                logger.error(
+                    "dem_source_dir does not exist: %s", self.dem_source_dir
+                )
+                raise FileNotFoundError(
+                    f"dem_source_dir does not exist: {self.dem_source_dir}\n"
+                    "Check the 'dem_source_dir' path in your config."
+                )
+            missing_lidar = [
+                f"{name}.tif"
+                for name in self.inputs.lidar_filenames
+                if not (self.dem_source_dir / f"{name}.tif").is_file()
+            ]
+            if missing_lidar:
+                bullet_list = "\n  - ".join(missing_lidar)
+                logger.error(
+                    "LiDAR files missing from dem_source_dir %s: %s",
+                    self.dem_source_dir, missing_lidar,
+                )
+                raise FileNotFoundError(
+                    "Step 0 cannot start; the following LiDAR files are missing "
+                    f"from dem_source_dir ({self.dem_source_dir}):\n  - {bullet_list}\n"
+                    "Place them in dem_source_dir or fix the filenames in your config."
+                )
+
+        raw = self.paths.hydrocon_raw
+        search_dirs = self._input_search_dirs()
+        missing: list[str] = []
+
+        for expected in self.expected_input_files():
+            if expected.is_file():
+                continue  # already staged
+
+            found: Path | None = None
+            for search_dir in search_dirs:
+                candidate = search_dir / expected.name
+                if candidate.is_file():
+                    found = candidate
+                    break
+
+            if found is None:
+                missing.append(expected.name)
+                continue
+
+            # Move the primary file to Raw/
+            dest = raw / expected.name
+            shutil.move(str(found), dest)
+            logger.info("Staged %s -> %s", found, dest)
+
+            # For shapefiles, carry sidecars from the same source directory
+            if expected.suffix.lower() == ".shp":
+                stem = expected.stem
+                for sidecar in found.parent.glob(f"{stem}.*"):
+                    if sidecar.suffix.lower() != ".shp" and sidecar.is_file():
+                        shutil.move(str(sidecar), raw / sidecar.name)
+                        logger.info("Staged sidecar %s -> %s", sidecar, raw / sidecar.name)
+
+        if missing:
+            bullet_list = "\n  - ".join(missing)
+            raise FileNotFoundError(
+                "Step 0 cannot start; the following input files could not be "
+                f"found anywhere in the search hierarchy:\n  - {bullet_list}\n"
+                f"Place them under {watershed} (or fix the filenames in your "
+                "config) and re-run."
+            )
 
     def validate_inputs_exist(self) -> None:
         """Fail fast if expected input files are missing.
@@ -257,6 +434,11 @@ class PwaConfig:
             "watershed_name": self.watershed_name,
             "base_data_dir": str(self.paths.base_data),
             "output_res_m": self.output_res_m,
+            "processing_res_m": self.processing_res_m,
+            "depth_llim": self.depth_llim,
+            "area_llim": self.area_llim,
+            "volume_llim": self.volume_llim,
+            "dem_source_dir": str(self.dem_source_dir) if self.dem_source_dir is not None else None,
             "inputs": {
                 "clrh_filename": self.inputs.clrh_filename,
                 "lidar_filenames": list(self.inputs.lidar_filenames),

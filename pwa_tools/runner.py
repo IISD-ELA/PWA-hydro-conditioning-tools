@@ -72,9 +72,10 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     """
     logger.info("Starting Step 0 for watershed '%s'", config.watershed_name)
 
-    # 0. Fail fast if expected input files are missing — saves the user
-    #    from a 5-minute LiDAR resample crashing on a missing shapefile.
-    config.validate_inputs_exist()
+    # 0. Search the data hierarchy for input files, move them to Raw/,
+    #    and fail fast if any are missing — saves the user from a
+    #    5-minute LiDAR resample crashing on a missing shapefile.
+    config.stage_inputs()
 
     # 1. Create directory structure
     config.paths.make_dirs()
@@ -89,16 +90,17 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     clrh_gdf = read_shapefile(clrh_path, target_crs=config.inputs.crs_string)
     logger.info("Loaded CLRH subbasins: %d features", len(clrh_gdf))
 
-    # 3. LiDAR DEM — merge if multiple rasters, otherwise use raw
+    # 3. LiDAR DEM — use dem_source_dir if configured, else hydrocon_raw
+    lidar_source = config.lidar_dir
     if config.inputs.multiple_lidar_rasters:
         lidar_path = merge_rasters(
             config.inputs.lidar_filenames,
             clrh_gdf,
-            config.paths.hydrocon_raw,
+            lidar_source,
             config.paths.hydrocon_interim,
         )
     else:
-        lidar_path = config.paths.hydrocon_raw / f"{config.inputs.lidar_filenames[0]}.tif"
+        lidar_path = lidar_source / f"{config.inputs.lidar_filenames[0]}.tif"
 
     # 4. Project subbasins to LiDAR CRS
     clrh_projected, lidar_crs, crs_tag, clrh_proj_path = project_subbasins_to_lidar(
@@ -116,8 +118,8 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     else:
         lidar_clipped = lidar_path
 
-    # 6. Resample to 2m resolution for processing
-    lidar_resampled = resample_lidar_raster(lidar_clipped, resolution_m=2)
+    # 6. Resample to processing resolution
+    lidar_resampled = resample_lidar_raster(lidar_clipped, resolution_m=config.processing_res_m)
 
     # 7. Load NHN streams shapefile
     nhn_path = config.paths.hydrocon_raw / f"{config.inputs.nhn_filename}.shp"
@@ -159,7 +161,11 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     wetlands_path = None
     if generate_wetlands:
         wetlands_path, _wetlands_gdf = gen_wetland_polygons(
-            depression_raster, config.paths.hydrocon_processed,
+            depression_raster,
+            config.paths.hydrocon_processed,
+            depth_llim=config.depth_llim,
+            area_llim=config.area_llim,
+            volume_llim=config.volume_llim,
         )
 
     # 12. Calculate depression depths per subbasin
@@ -169,6 +175,7 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         depression_raster,
         clrh_projected,
         config.paths.hydrocon_processed,
+        resolution_m=config.processing_res_m,
     )
 
     logger.info("Step 0 complete. Depression depths → %s", depression_depths.name)

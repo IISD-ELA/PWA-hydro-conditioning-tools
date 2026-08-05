@@ -102,6 +102,7 @@ def calc_depression_depths(
     depressions_raster_path: Path,
     clrh_gdf: gpd.GeoDataFrame,
     processed_dir: Path,
+    resolution_m: float = 5.0,
 ) -> Path:
     """Calculate per-subbasin depression depths from zonal statistics.
 
@@ -146,7 +147,7 @@ def calc_depression_depths(
                 output=str(clrh_raster_path),
                 field="FID",
                 nodata=True,
-                cell_size=5.0,
+                cell_size=resolution_m,
             ),
             "vector_polygons_to_raster",
         )
@@ -160,7 +161,7 @@ def calc_depression_depths(
             "gdalwarp",
             "-r", "near",
             "-overwrite",
-            "-tr", "5", "5",
+            "-tr", str(resolution_m), str(resolution_m),
             "-te",
             str(bounds.left), str(bounds.bottom),
             str(bounds.right), str(bounds.top),

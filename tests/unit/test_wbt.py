@@ -55,8 +55,11 @@ def test_wbt_session_restores_cwd_on_normal_exit(mock_get_class: MagicMock) -> N
     cwd_before = os.getcwd()
     with wbt_session() as wbt:
         # Simulate what WBT.run_tool does internally: chdir to exe_path
-        os.chdir("/tmp")
-        assert os.getcwd() == "/private/tmp" or os.getcwd() == "/tmp"
+        if os.name == "posix":
+            os.chdir("/tmp")
+        elif os.name == "nt":
+            os.chdir("C:/Windows/Temp")
+        assert os.getcwd() == "/private/tmp" or os.getcwd() == "/tmp" or os.getcwd() == "C:\\Windows\\Temp"
 
     assert os.getcwd() == cwd_before
 
@@ -70,7 +73,10 @@ def test_wbt_session_restores_cwd_on_exception(mock_get_class: MagicMock) -> Non
     cwd_before = os.getcwd()
     with pytest.raises(WBTError):
         with wbt_session() as wbt:
-            os.chdir("/tmp")
+            if os.name == "posix":
+                os.chdir("/tmp")
+            elif os.name == "nt":
+                os.chdir("C:/Windows/Temp")
             raise WBTError("test_tool", 1)
 
     assert os.getcwd() == cwd_before
