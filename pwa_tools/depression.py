@@ -152,24 +152,32 @@ def calc_depression_depths(
             "vector_polygons_to_raster",
         )
 
-    # 2. Align subbasin raster to depression raster extents
+    # 2. Align subbasin raster to depression raster extents (only if CRS differs)
     with rasterio.open(depressions_raster_path) as dep_src:
+        dep_crs = dep_src.crs
         bounds = dep_src.bounds
 
-    subprocess.run(
-        [
-            "gdalwarp",
-            "-r", "near",
-            "-overwrite",
-            "-tr", str(resolution_m), str(resolution_m),
-            "-te",
-            str(bounds.left), str(bounds.bottom),
-            str(bounds.right), str(bounds.top),
-            str(clrh_raster_path),
-            str(clrh_aligned_path),
-        ],
-        check=True,
-    )
+    with rasterio.open(clrh_raster_path) as clrh_src:
+        clrh_crs = clrh_src.crs
+
+    if dep_crs != clrh_crs:
+        logger.info("CRS mismatch — reprojecting subbasin raster to match depressions raster")
+        subprocess.run(
+            [
+                "gdalwarp",
+                "-r", "near",
+                "-overwrite",
+                "-tr", str(resolution_m), str(resolution_m),
+                "-te",
+                str(bounds.left), str(bounds.bottom),
+                str(bounds.right), str(bounds.top),
+                str(clrh_raster_path),
+                str(clrh_aligned_path),
+            ],
+            check=True,
+        )
+    else:
+        clrh_aligned_path = clrh_raster_path
 
     # 3. Zonal statistics
     with wbt_session() as wbt:
