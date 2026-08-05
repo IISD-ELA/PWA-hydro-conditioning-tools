@@ -250,6 +250,21 @@ def test_config_output_res_m_roundtrips_via_to_dict(tmp_path: Path) -> None:
     assert PwaConfig.from_dict(config.to_dict()).output_res_m == 10.0
 
 
+def test_config_processing_res_m_defaults_to_2(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    assert config.processing_res_m == 2.0
+
+
+def test_config_processing_res_m_loaded_from_dict(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path, processing_res_m=5.0))
+    assert config.processing_res_m == 5.0
+
+
+def test_config_processing_res_m_roundtrips_via_to_dict(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path, processing_res_m=4.0))
+    assert PwaConfig.from_dict(config.to_dict()).processing_res_m == 4.0
+
+
 # ============ Input-file validation ============
 
 
