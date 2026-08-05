@@ -34,29 +34,36 @@ _VOLUME_THRESHOLD_M3 = 30   # minimum wetland storage volume
 def gen_wetland_polygons(
     depressions_raster_path: Path,
     output_dir: Path,
+    *,
+    depth_llim: float = _DEPTH_THRESHOLD_M,
+    area_llim: float = _AREA_THRESHOLD_M2,
+    volume_llim: float = _VOLUME_THRESHOLD_M3,
 ) -> tuple[Path, gpd.GeoDataFrame]:
     """Generate wetland polygons with area/volume/depth statistics from a depression raster.
 
     Steps:
-      1. Threshold the depression raster at ``_DEPTH_THRESHOLD_M``
-         (currently 0.1 m = 10 cm; ignores shallower depressions)
+      1. Threshold the depression raster at ``depth_llim``
+         (default ``_DEPTH_THRESHOLD_M`` = 0.1 m / 10 cm; ignores shallower depressions)
       2. Label connected components (8-connectivity)
       3. Compute per-wetland area, total storage volume, and median depth
-      4. Filter by area >= ``_AREA_THRESHOLD_M2`` (currently 4000 m²)
-         and volume >= ``_VOLUME_THRESHOLD_M3`` (currently 30 m³)
+      4. Filter by area >= ``area_llim`` (default ``_AREA_THRESHOLD_M2`` = 4000 m²)
+         and volume >= ``volume_llim`` (default ``_VOLUME_THRESHOLD_M3`` = 30 m³)
       5. Vectorize remaining polygons
       6. Write stats CSV + shapefile
 
-    Threshold constants live at module level so the live values are
-    the source of truth; the step descriptions above reference the
-    constants by name (not by literal value) to avoid the docstring
-    silently drifting from the implementation when a default
-    changes. See ``test_wetlands_docstring_cites_live_constants``.
+    The three threshold parameters are optional keyword-only arguments whose
+    defaults are the module-level constants ``_DEPTH_THRESHOLD_M``,
+    ``_AREA_THRESHOLD_M2``, and ``_VOLUME_THRESHOLD_M3``.  Pass explicit
+    values (e.g. from a :class:`~pwa_tools.config.PwaConfig`) to override
+    them for a specific dataset without editing the source.
+
+    See ``test_wetlands_docstring_cites_live_constants``.
 
     Returns (shapefile_path, wetlands_gdf).
     """
     depressions_raster_path = Path(depressions_raster_path)
     output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     with rasterio.open(depressions_raster_path) as src:
         depression_data = src.read(1)
@@ -66,7 +73,7 @@ def gen_wetland_polygons(
         crs = src.crs
 
     # Mask nodata and select depressions above threshold
-    valid_mask = (depression_data > _DEPTH_THRESHOLD_M) & (depression_data != nodata)
+    valid_mask = (depression_data > depth_llim) & (depression_data != nodata)
 
     # Label connected depressions (wetlands)
     structure = np.ones((3, 3), dtype=int)
@@ -101,8 +108,8 @@ def gen_wetland_polygons(
 
     # Filter out background + small features
     stats_df = stats_df.query(
-        f"wetland_id != 0 and area_m2 >= {_AREA_THRESHOLD_M2} "
-        f"and volume_m3 >= {_VOLUME_THRESHOLD_M3}"
+        f"wetland_id != 0 and area_m2 >= {area_llim} "
+        f"and volume_m3 >= {volume_llim}"
     )
 
     # Write stats CSV
@@ -129,12 +136,16 @@ def gen_wetland_polygons(
     )
     gdf = gdf.merge(stats_df, on="wetland_id")
 
-    # Write shapefile
+    # Write shapefile (skip when no wetlands pass the filter)
     output_shapefile = output_dir / "Wetlands_Polygons_with_Stats.shp"
-    gdf.to_file(output_shapefile)
-
-    logger.info(
-        "Generated %d wetland polygons → %s",
-        len(gdf), output_shapefile.name,
-    )
+    if not gdf.empty:
+        gdf.to_file(output_shapefile)
+        logger.info(
+            "Generated %d wetland polygons → %s",
+            len(gdf), output_shapefile.name,
+        )
+    else:
+        logger.info(
+            "No wetland polygons met the filter thresholds; shapefile not written."
+        )
     return output_shapefile, gdf

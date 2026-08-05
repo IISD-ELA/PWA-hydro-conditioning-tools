@@ -20,8 +20,10 @@ from shapely.geometry import box
 
 from pwa_tools.io.raster import (
     clip_lidar_to_shapefile,
+    crs_uses_metres,
     fill_nodata_gaps,
     get_raster_resolution,
+    reproject_raster,
     resample_lidar_raster,
 )
 
@@ -250,3 +252,37 @@ def test_fill_nodata_passthrough_when_no_gaps(tmp_path: Path) -> None:
         result = src.read(1)
 
     np.testing.assert_array_equal(result, data[0])
+
+
+# ============ crs_uses_metres ============
+
+
+def test_crs_uses_metres_true(tmp_path: Path) -> None:
+    """Projected CRS with metre linear unit → True."""
+    raster = _write_synthetic_raster(tmp_path / "dem_utm.tif", crs="EPSG:32614")
+    assert crs_uses_metres(raster) is True
+
+
+def test_crs_uses_metres_false_geographic(tmp_path: Path) -> None:
+    """Geographic CRS (degrees) → False."""
+    raster = _write_synthetic_raster(tmp_path / "dem_geo.tif", crs="EPSG:4326")
+    assert crs_uses_metres(raster) is False
+
+
+# ============ reproject_raster ============
+
+
+def test_reproject_raster_produces_target_crs(tmp_path: Path) -> None:
+    """Reprojecting EPSG:4326 raster to EPSG:32614 yields output in EPSG:32614."""
+    raster = _write_synthetic_raster(tmp_path / "dem.tif", crs="EPSG:4326")
+    result = reproject_raster(raster, "EPSG:32614", tmp_path)
+    with rasterio.open(result) as src:
+        assert src.crs.to_epsg() == 32614
+
+
+def test_reproject_raster_output_naming(tmp_path: Path) -> None:
+    """Output filename follows the {stem}_reprojected_{CRS} convention."""
+    raster = _write_synthetic_raster(tmp_path / "dem.tif", crs="EPSG:4326")
+    result = reproject_raster(raster, "EPSG:32614", tmp_path)
+    assert result.name == "dem_reprojected_EPSG32614.tif"
+    assert result.parent == tmp_path

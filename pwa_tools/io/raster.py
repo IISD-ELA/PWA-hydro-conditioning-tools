@@ -111,6 +111,51 @@ def get_raster_resolution(path: Path) -> float:
         return min(abs(src.res[0]), abs(src.res[1]))
 
 
+def crs_uses_metres(path: Path) -> bool:
+    """Return True if the CRS of *path* has metres as its linear unit."""
+    with rasterio.open(path) as src:
+        crs = src.crs
+    if crs.is_geographic:
+        return False
+    return crs.linear_units.lower() in {"metre", "meter", "metres", "meters", "m"}
+
+
+def reproject_raster(input_path: Path, target_crs: str, output_dir: Path) -> Path:
+    """Reproject a raster to *target_crs*. Writes to *output_dir*.
+
+    Output filename: ``{stem}_reprojected_{CRS}.tif`` (e.g. ``dem_reprojected_EPSG32614.tif``).
+    Returns the output path.
+    """
+    input_path = Path(input_path)
+    output_dir = Path(output_dir)
+
+    crs_tag = target_crs.replace(":", "")
+    output_path = output_dir / f"{input_path.stem}_reprojected_{crs_tag}{input_path.suffix}"
+
+    with rasterio.open(input_path) as src:
+        transform, width, height = calculate_default_transform(
+            src.crs, target_crs, src.width, src.height, *src.bounds,
+        )
+        profile = src.meta.copy()
+        profile.update({"crs": target_crs, "transform": transform, "width": width, "height": height})
+
+        with rasterio.open(output_path, "w", **profile) as dst:
+            for i in range(1, src.count + 1):
+                reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=target_crs,
+                    resampling=Resampling.bilinear,
+                    dst_nodata=src.nodata,
+                )
+
+    logger.info("Reprojected %s → %s (%s)", input_path.name, output_path.name, target_crs)
+    return output_path
+
+
 def fill_nodata_gaps(
     input_path: Path,
     output_path: Path,
