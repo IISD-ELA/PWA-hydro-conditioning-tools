@@ -175,6 +175,7 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         depression_raster,
         clrh_projected,
         config.paths.hydrocon_processed,
+        resolution_m=config.processing_res_m,
     )
 
     logger.info("Step 0 complete. Depression depths → %s", depression_depths.name)
