@@ -33,7 +33,9 @@ from pwa_tools.config import PwaConfig
 from pwa_tools.depression import calc_depression_depths, gen_depressions_raster
 from pwa_tools.io.raster import (
     clip_lidar_to_shapefile,
+    crs_uses_metres,
     merge_rasters,
+    reproject_raster,
     resample_lidar_raster,
 )
 from pwa_tools.io.shapefile import read_shapefile
@@ -101,6 +103,15 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         )
     else:
         lidar_path = lidar_source / f"{config.inputs.lidar_filenames[0]}.tif"
+
+    # 3b. Reproject if CRS does not use metres — config.inputs.crs_string is the preferred target
+    if not crs_uses_metres(lidar_path):
+        logger.warning(
+            "LiDAR CRS does not use metres; reprojecting to %s", config.inputs.crs_string
+        )
+        lidar_path = reproject_raster(
+            lidar_path, config.inputs.crs_string, config.paths.hydrocon_interim,
+        )
 
     # 4. Project subbasins to LiDAR CRS
     clrh_projected, lidar_crs, crs_tag, clrh_proj_path = project_subbasins_to_lidar(
