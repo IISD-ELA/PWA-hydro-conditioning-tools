@@ -118,8 +118,8 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     else:
         lidar_clipped = lidar_path
 
-    # 6. Resample to 2m resolution for processing
-    lidar_resampled = resample_lidar_raster(lidar_clipped, resolution_m=2)
+    # 6. Resample to processing resolution
+    lidar_resampled = resample_lidar_raster(lidar_clipped, resolution_m=config.processing_res_m)
 
     # 7. Load NHN streams shapefile
     nhn_path = config.paths.hydrocon_raw / f"{config.inputs.nhn_filename}.shp"

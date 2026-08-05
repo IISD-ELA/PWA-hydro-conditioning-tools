@@ -135,6 +135,7 @@ class PwaConfig:
     paths: PwaPaths
     inputs: PwaInputs
     output_res_m: float = 5.0
+    processing_res_m: float = 2.0  # intermediate LiDAR resampling resolution
     # Wetland filter thresholds — override in config YAML to suit the dataset.
     # Defaults match the module-level constants in pwa_tools.wetlands.
     depth_llim: float = 0.1    # minimum depression depth (m)
@@ -149,6 +150,8 @@ class PwaConfig:
             raise ValueError("watershed_name is required")
         if self.output_res_m <= 0:
             raise ValueError(f"output_res_m must be positive, got: {self.output_res_m}")
+        if self.processing_res_m <= 0:
+            raise ValueError(f"processing_res_m must be positive, got: {self.processing_res_m}")
 
     @classmethod
     def from_dict(cls, data: dict) -> "PwaConfig":
@@ -178,6 +181,7 @@ class PwaConfig:
             culvert_filename=culvert,
         )
         output_res_m = float(data.get("output_res_m", 5.0))
+        processing_res_m = float(data.get("processing_res_m", 2.0))
         depth_llim = float(data.get("depth_llim", 0.1))
         area_llim = float(data.get("area_llim", 4000.0))
         volume_llim = float(data.get("volume_llim", 30.0))
@@ -188,6 +192,7 @@ class PwaConfig:
             paths=paths,
             inputs=inputs,
             output_res_m=output_res_m,
+            processing_res_m=processing_res_m,
             depth_llim=depth_llim,
             area_llim=area_llim,
             volume_llim=volume_llim,
@@ -429,6 +434,7 @@ class PwaConfig:
             "watershed_name": self.watershed_name,
             "base_data_dir": str(self.paths.base_data),
             "output_res_m": self.output_res_m,
+            "processing_res_m": self.processing_res_m,
             "depth_llim": self.depth_llim,
             "area_llim": self.area_llim,
             "volume_llim": self.volume_llim,
