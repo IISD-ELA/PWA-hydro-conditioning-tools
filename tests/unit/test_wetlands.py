@@ -167,3 +167,31 @@ def test_all_three_thresholds_respected_simultaneously(tmp_path: Path) -> None:
         volume_llim=50.0,
     )
     assert len(gdf) == 1
+
+
+# ---------------------------------------------------------------------------
+# MultiPolygon merging — diagonal-only-touch pattern
+# ---------------------------------------------------------------------------
+
+
+def test_diagonal_touch_yields_one_multipolygon_row(tmp_path: Path) -> None:
+    """Two blocks joined only diagonally must produce one row with a MultiPolygon.
+
+    scipy.ndimage.label uses 8-connectivity, so diagonally-adjacent pixels are
+    one component (same label).  rasterio.features.shapes uses 4-connectivity,
+    so it returns two separate polygons for that component.  The dissolve step
+    must collapse them into a single MultiPolygon record.
+    """
+    # Two 10x10 blocks that share only a diagonal corner at (14,14)/(15,15).
+    # pixel_size=10 m → each block: area=10000 m², volume=10000 m³ (passes thresholds).
+    data = np.zeros((40, 40))
+    data[5:15, 5:15] = 1.0   # block A — last pixel at (14,14)
+    data[15:25, 15:25] = 1.0  # block B — first pixel at (15,15), diagonal to (14,14)
+    raster_path = _write_depression_raster(tmp_path / "dep.tif", data, pixel_size_m=10.0)
+
+    _, gdf = gen_wetland_polygons(raster_path, tmp_path / "out")
+
+    assert len(gdf) == 1, "diagonal-touch blocks should be one wetland record"
+    assert gdf.geometry.iloc[0].geom_type == "MultiPolygon", (
+        "separate polygon pieces of one wetland must be dissolved into a MultiPolygon"
+    )
