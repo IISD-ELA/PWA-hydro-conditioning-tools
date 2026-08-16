@@ -76,11 +76,11 @@ def gen_wetland_polygons(
     valid_mask = (depression_data > depth_llim) & (depression_data != nodata)
 
     # Label connected depressions (wetlands)
-    structure = np.ones((3, 3), dtype=int)
-    labeled_array, num_features = label(valid_mask, structure=structure)
+    structure = np.ones((3, 3), dtype=int) # Specify 8-connectivity for labeling (diagonal and orthogonal neighbors)
+    labeled_array, num_features = label(valid_mask, structure=structure) # Create labels for each "wetland" (connected pixels in the mask)
 
-    flat_labels = labeled_array.ravel()
-    flat_depths = depression_data.ravel()
+    flat_labels = labeled_array.ravel() # Flatten
+    flat_depths = depression_data.ravel() # Flatten
 
     # Per-wetland statistics
     counts = np.bincount(flat_labels)
@@ -135,6 +135,8 @@ def gen_wetland_polygons(
         {"wetland_id": labels_out, "geometry": polygons}, crs=crs,
     )
     gdf = gdf.merge(stats_df, on="wetland_id")
+    # Merge polygon pieces sharing a label (8-conn label, 4-conn vectorisation) into MultiPolygons
+    gdf = gdf.dissolve(by="wetland_id", aggfunc="first").reset_index()
 
     # Write shapefile (skip when no wetlands pass the filter)
     output_shapefile = output_dir / "Wetlands_Polygons_with_Stats.shp"
