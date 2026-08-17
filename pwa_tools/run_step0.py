@@ -82,7 +82,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     result = run_step0(config, generate_wetlands=args.wetlands)
 
     print()
-    print(f"Depression depths : {result.depression_depths}")
+    if result.depression_depths is not None:
+        print(f"Depression depths : {result.depression_depths}")
     print(f"Depression raster : {result.depression_raster}")
     if result.wetlands is not None:
         print(f"Wetland polygons  : {result.wetlands}")
