@@ -228,39 +228,3 @@ def test_imperial_columns_present_and_accurate(tmp_path: Path) -> None:
     assert pytest.approx(row["vol_acft"], rel=1e-4) == row["volume_m3"] / _M3_PER_ACFT
     assert pytest.approx(row["med_dep_ft"], rel=1e-4) == row["median_depth_m"] * _FT_PER_M
 
-
-# ---------------------------------------------------------------------------
-# Imperial unit columns
-# ---------------------------------------------------------------------------
-
-
-def test_imperial_columns_present_and_correct(tmp_path: Path) -> None:
-    """Output GDF must include area_ac, vol_acft, and med_dep_ft derived
-    from the corresponding metric columns using the standard conversion factors."""
-    # 100x100 block at 1.0 m depth, 1 m pixels.
-    # area_m2 = 10 000, volume_m3 = 10 000, median_depth_m = 1.0
-    data = np.zeros((120, 120))
-    data[10:110, 10:110] = 1.0
-    raster_path = _write_depression_raster(tmp_path / "dep.tif", data, pixel_size_m=1.0)
-
-    _, gdf = gen_wetland_polygons(raster_path, tmp_path / "out")
-
-    assert len(gdf) == 1
-
-    row = gdf.iloc[0]
-
-    assert "area_ac" in gdf.columns
-    assert "vol_acft" in gdf.columns
-    assert "med_dep_ft" in gdf.columns
-
-    # Metric columns must still be present
-    assert "area_m2" in gdf.columns
-    assert "volume_m3" in gdf.columns
-    assert "median_depth_m" in gdf.columns
-
-    # Conversion: 1 m² = 1/4046.8564224 acres
-    assert row["area_ac"] == pytest.approx(row["area_m2"] / 4046.8564224, rel=1e-6)
-    # Conversion: 1 m³ = 1/1233.48184 acre-feet
-    assert row["vol_acft"] == pytest.approx(row["volume_m3"] / 1233.48184, rel=1e-6)
-    # Conversion: 1 m = 3.28084 feet
-    assert row["med_dep_ft"] == pytest.approx(row["median_depth_m"] * 3.28084, rel=1e-6)
