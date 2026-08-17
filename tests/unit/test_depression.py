@@ -48,8 +48,25 @@ def stub_inputs(tmp_path: Path):
 
 def _run_calc(stub_inputs, tmp_path, resolution_m=5.0, **kwargs):
     """Run calc_depression_depths with WBT and subprocess fully mocked."""
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_bounds
+
     fake_wbt = _make_fake_wbt()
-    fake_html = '<table><tr><th>Mean</th></tr><tr><td>0.1</td></tr></table>'
+
+    # Side effect creates the output raster with a deliberately different CRS
+    # (EPSG:4326 vs deps.tif's EPSG:32614) so the CRS-mismatch branch runs
+    # and gdalwarp is called — keeping the -tr assertions valid.
+    def _create_clrh_raster(**kw):
+        transform = from_bounds(0, 0, 100, 100, 10, 10)
+        with rasterio.open(
+            kw["output"], "w", driver="GTiff", height=10, width=10,
+            count=1, dtype=np.float32, crs="EPSG:4326", transform=transform,
+        ) as dst:
+            dst.write(np.zeros((1, 10, 10), dtype=np.float32))
+        return 0
+
+    fake_wbt.vector_polygons_to_raster.side_effect = _create_clrh_raster
 
     with (
         patch("pwa_tools.depression.wbt_session") as mock_session,
