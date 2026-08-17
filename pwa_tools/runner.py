@@ -50,8 +50,8 @@ logger = logging.getLogger(__name__)
 class Step0Result:
     """Paths to the key outputs of a Step 0 run."""
 
-    depression_depths: Path
     depression_raster: Path
+    depression_depths: Optional[Path] = None
     wetlands: Optional[Path] = None
 
 
@@ -180,18 +180,20 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         )
 
     # 12. Calculate depression depths per subbasin
-    depression_depths = calc_depression_depths(
-        clrh_proj_path,
-        config.watershed_name,
-        depression_raster,
-        clrh_projected,
-        config.paths.hydrocon_processed,
-        resolution_m=config.processing_res_m,
-    )
+    depression_depths = None
+    if config.summarize_by_subbasin:
+        depression_depths = calc_depression_depths(
+            clrh_proj_path,
+            config.watershed_name,
+            depression_raster,
+            clrh_projected,
+            config.paths.hydrocon_processed,
+            resolution_m=config.processing_res_m,
+        )
 
-    logger.info("Step 0 complete. Depression depths → %s", depression_depths.name)
+    logger.info("Step 0 complete. Depression depths → %s", depression_depths and depression_depths.name)
     return Step0Result(
-        depression_depths=depression_depths,
         depression_raster=depression_raster,
+        depression_depths=depression_depths,
         wetlands=wetlands_path,
     )

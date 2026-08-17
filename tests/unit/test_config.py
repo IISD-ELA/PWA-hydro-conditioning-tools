@@ -265,6 +265,21 @@ def test_config_processing_res_m_roundtrips_via_to_dict(tmp_path: Path) -> None:
     assert PwaConfig.from_dict(config.to_dict()).processing_res_m == 4.0
 
 
+def test_config_summarize_by_subbasin_defaults_to_true(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    assert config.summarize_by_subbasin is True
+
+
+def test_config_summarize_by_subbasin_loaded_from_dict(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path, summarize_by_subbasin=False))
+    assert config.summarize_by_subbasin is False
+
+
+def test_config_summarize_by_subbasin_roundtrips_via_to_dict(tmp_path: Path) -> None:
+    config = PwaConfig.from_dict(_config_dict(tmp_path, summarize_by_subbasin=False))
+    assert PwaConfig.from_dict(config.to_dict()).summarize_by_subbasin is False
+
+
 # ============ Input-file validation ============
 
 

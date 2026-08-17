@@ -195,3 +195,36 @@ def test_diagonal_touch_yields_one_multipolygon_row(tmp_path: Path) -> None:
     assert gdf.geometry.iloc[0].geom_type == "MultiPolygon", (
         "separate polygon pieces of one wetland must be dissolved into a MultiPolygon"
     )
+
+
+# ---------------------------------------------------------------------------
+# Imperial unit columns
+# ---------------------------------------------------------------------------
+
+_M2_PER_ACRE = 4046.8564224
+_M3_PER_ACFT = 1233.4818375
+_FT_PER_M = 3.28084
+
+
+def test_imperial_columns_present_and_accurate(tmp_path: Path) -> None:
+    """The returned GDF (and written shapefile) must include area_ac, vol_acft,
+    and med_dep_ft columns derived correctly from the metric values."""
+    # 20x20 block at 0.5 m depth with 10 m pixels →
+    # area = 400 * 100 = 40 000 m²,  volume = 40 000 * 0.5 = 20 000 m³
+    data = np.zeros((30, 30))
+    data[5:25, 5:25] = 0.5
+    raster_path = _write_depression_raster(tmp_path / "dep.tif", data, pixel_size_m=10.0)
+
+    _, gdf = gen_wetland_polygons(raster_path, tmp_path / "out")
+    assert len(gdf) == 1
+
+    row = gdf.iloc[0]
+
+    assert "area_ac" in gdf.columns
+    assert "vol_acft" in gdf.columns
+    assert "med_dep_ft" in gdf.columns
+
+    assert pytest.approx(row["area_ac"], rel=1e-4) == row["area_m2"] / _M2_PER_ACRE
+    assert pytest.approx(row["vol_acft"], rel=1e-4) == row["volume_m3"] / _M3_PER_ACFT
+    assert pytest.approx(row["med_dep_ft"], rel=1e-4) == row["median_depth_m"] * _FT_PER_M
+

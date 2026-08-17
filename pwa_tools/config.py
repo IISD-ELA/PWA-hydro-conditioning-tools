@@ -144,6 +144,8 @@ class PwaConfig:
     # Optional shared DEM directory — LiDAR files are read directly from here
     # and are never staged/moved into hydrocon_raw.
     dem_source_dir: Optional[Path] = None
+    # Set to False to skip step 12 (depression-depth summary per subbasin).
+    summarize_by_subbasin: bool = True
 
     def __post_init__(self) -> None:
         if not self.watershed_name:
@@ -187,6 +189,7 @@ class PwaConfig:
         volume_llim = float(data.get("volume_llim", 30.0))
         dem_source_dir_raw = data.get("dem_source_dir")
         dem_source_dir = Path(dem_source_dir_raw) if dem_source_dir_raw else None
+        summarize_by_subbasin = bool(data.get("summarize_by_subbasin", True))
         return cls(
             watershed_name=watershed_name,
             paths=paths,
@@ -197,6 +200,7 @@ class PwaConfig:
             area_llim=area_llim,
             volume_llim=volume_llim,
             dem_source_dir=dem_source_dir,
+            summarize_by_subbasin=summarize_by_subbasin,
         )
 
     @classmethod
@@ -439,6 +443,7 @@ class PwaConfig:
             "area_llim": self.area_llim,
             "volume_llim": self.volume_llim,
             "dem_source_dir": str(self.dem_source_dir) if self.dem_source_dir is not None else None,
+            "summarize_by_subbasin": self.summarize_by_subbasin,
             "inputs": {
                 "clrh_filename": self.inputs.clrh_filename,
                 "lidar_filenames": list(self.inputs.lidar_filenames),

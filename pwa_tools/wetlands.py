@@ -138,6 +138,11 @@ def gen_wetland_polygons(
     # Merge polygon pieces sharing a label (8-conn label, 4-conn vectorisation) into MultiPolygons
     gdf = gdf.dissolve(by="wetland_id", aggfunc="first").reset_index()
 
+    # Imperial unit columns (for final output only; all processing remains metric)
+    gdf["area_ac"]   = gdf["area_m2"]       / 4046.8564224
+    gdf["vol_acft"]  = gdf["volume_m3"]      / 1233.4818375
+    gdf["med_dep_ft"] = gdf["median_depth_m"] * 3.28084
+
     # Write shapefile (skip when no wetlands pass the filter)
     output_shapefile = output_dir / "Wetlands_Polygons_with_Stats.shp"
     if not gdf.empty:

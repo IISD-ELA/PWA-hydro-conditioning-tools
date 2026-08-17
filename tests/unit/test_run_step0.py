@@ -120,3 +120,22 @@ def test_main_prints_wetlands_path_when_generated(
     out = capsys.readouterr().out
     assert "Wetland polygons" in out
     assert "wetlands.shp" in out
+
+
+def test_main_omits_depression_depths_when_subbasin_summary_disabled(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    yaml_path = tmp_path / "pwa_config.yml"
+    _write_minimal_config(yaml_path, tmp_path)
+    _stub_run_step0(
+        monkeypatch,
+        Step0Result(
+            depression_raster=Path("/tmp/d.tif"),
+            depression_depths=None,
+        ),
+    )
+
+    rc = main(["--config", str(yaml_path)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Depression depths" not in out
