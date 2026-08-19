@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pwa-tools"
 version = "1.1.8" # Reminder to update this version number as needed.
+requires-python = ">=3.12,<3.13"
 authors = [
     {name = "IISD Experimental Lakes Area", email = "eladata@iisd.net"},
     {name = "Thomas Saleh", email = "tsaleh@iisd-ela.org"},
