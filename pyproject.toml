@@ -3,6 +3,10 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
+authors = [
+    { name = "IISD Experimental Lakes Area" },
+    { name = "International Institute for Sustainable Development" }
+]
 name = "pwa-tools"
 version = "1.1.8" # Reminder to update this version number as needed.
 description = "Hydro conditioning tools for PWA workflows - robust input staging, optional subbasin summary"
@@ -21,6 +25,11 @@ dependencies = [
 ]
 # GDAL (osgeo) is required for merge_rasters but cannot be pip-installed.
 # Install via conda:  conda install -c conda-forge gdal
+
+[project.urls]
+Homepage = "https://www.iisd.org/ela/"
+Organization = "https://www.iisd.org/"
+Repository = "https://github.com/IISD-ELA/PWA-hydro-conditioning-tools"
 
 [project.optional-dependencies]
 dev = [
