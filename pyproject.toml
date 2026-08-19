@@ -18,7 +18,6 @@ maintainers = [
 ]
 description = "Hydro conditioning tools for PWA workflows - robust input staging, optional subbasin summary"
 readme = "README.md"
-requires-python = ">=3.9"
 dependencies = [
     "numpy>=1.24",
     "pandas>=2.0",
