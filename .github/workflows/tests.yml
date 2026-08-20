@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   unit:
-    name: unit tests (py3.11)
+    name: unit tests (py3.12)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
