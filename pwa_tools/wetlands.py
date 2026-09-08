@@ -31,6 +31,13 @@ _AREA_THRESHOLD_M2 = 4000    # minimum wetland area
 _VOLUME_THRESHOLD_M3 = 30   # minimum wetland storage volume
 
 
+def gen_accumulation_raster(direction_path, output_path):
+    pass
+
+def gen_direction_raster(dem_path, output_path):
+    pass
+
+
 def gen_wetland_polygons(
     depressions_raster_path: Path,
     output_dir: Path,

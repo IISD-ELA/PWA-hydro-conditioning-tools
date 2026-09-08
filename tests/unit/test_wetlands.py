@@ -13,6 +13,8 @@ import numpy as np
 import pytest
 import rasterio
 from rasterio.transform import from_bounds
+from tests.unit.test_depression import _make_fake_wbt
+from unittest.mock import MagicMock, patch
 
 from pwa_tools import wetlands
 from pwa_tools.wetlands import (
@@ -20,6 +22,8 @@ from pwa_tools.wetlands import (
     _DEPTH_THRESHOLD_M,
     _VOLUME_THRESHOLD_M3,
     gen_wetland_polygons,
+    gen_direction_raster,
+    gen_accumulation_raster
 )
 
 
@@ -51,6 +55,67 @@ def _write_depression_raster(
     ) as dst:
         dst.write(data.astype(np.float32), 1)
     return path
+
+# ---------------------------------------------------------------------------
+# Flow routing raster pre-processing
+# ---------------------------------------------------------------------------
+
+def test_gen_direction_raster(tmp_path: Path) -> None:
+    """Step 10c: gen_direction_raster() must invoke WBT d8_pointer and return the output path."""
+    # Arrange: a flat DEM and the output location the function under test should write to
+    dem_path = _write_depression_raster(tmp_path / "dem.tif", np.ones((10, 10)))
+    output_path = tmp_path / "direction.tif"
+
+    fake_wbt = _make_fake_wbt()
+
+    # Stub d8_pointer to write a raster to whatever output path it's called with
+    def _run_d8_pointer(**kwargs):
+        _write_depression_raster(Path(kwargs["output"]), np.ones((10, 10)))
+        return 0
+
+    fake_wbt.d8_pointer.side_effect = _run_d8_pointer
+
+    # Replace the real WBT session context manager with our fake so no external tool runs
+    with patch("pwa_tools.depression.wbt_session") as mock_session:
+        mock_session.return_value.__enter__ = lambda s: fake_wbt
+        mock_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        result_path = gen_direction_raster(dem_path, output_path)
+
+    # Assert: WBT was invoked exactly once and the expected output file was produced
+    fake_wbt.d8_pointer.assert_called_once()
+    assert result_path == output_path
+    assert output_path.exists()
+
+
+def test_gen_accumulation_raster(tmp_path: Path) -> None:
+    """Step 10d: gen_accumulation_raster() must invoke WBT d8_flow_accumulation on the direction raster."""
+    # Arrange: a flow-direction raster as input and the output location for accumulation
+    direction_path = _write_depression_raster(tmp_path / "direction.tif", np.ones((10, 10)))
+    output_path = tmp_path / "accumulation.tif"
+
+    fake_wbt = _make_fake_wbt()
+
+    # Stub d8_flow_accumulation to write a known constant raster so the result is checkable
+    def _run_d8_flow_accum(**kwargs):
+        _write_depression_raster(Path(kwargs["output"]), np.full((10, 10), 5.0))
+        return 0
+
+    fake_wbt.d8_flow_accum.side_effect = _run_d8_flow_accum
+
+    # Replace the real WBT session context manager with our fake so no external tool runs
+    with patch("pwa_tools.depression.wbt_session") as mock_session:
+        mock_session.return_value.__enter__ = lambda s: fake_wbt
+        mock_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        result_path = gen_accumulation_raster(direction_path, output_path)
+
+    # Assert: WBT was invoked exactly once and the output raster carries the stubbed value
+    fake_wbt.d8_flow_accum.assert_called_once()
+    assert result_path == output_path
+    with rasterio.open(output_path) as src:
+        assert src.read(1).max() == pytest.approx(5.0)
+
 
 
 # ---------------------------------------------------------------------------
