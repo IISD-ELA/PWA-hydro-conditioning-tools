@@ -41,7 +41,7 @@ from pwa_tools.io.raster import (
 from pwa_tools.io.shapefile import read_shapefile
 from pwa_tools.projection import project_subbasins_to_lidar, project_subbasins_to_nhn
 from pwa_tools.streams import clip_nhn_to_watershed
-from pwa_tools.wetlands import gen_wetland_polygons
+from pwa_tools.wetlands import gen_accum_raster, gen_direction_raster, gen_wetland_polygons
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +168,13 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         depression_raster, resolution_m=config.output_res_m,
     )
 
+    # 10c. Optional d8 processing for wetland catchment analysis
+    if config.wetland_catchments:
+        d8_raster = gen_direction_raster(depression_raster, config.paths.hydrocon_processed)
+        # 10d. Optional: Generate accumulation raster for wetland catchment analysis if enabled
+        accum_raster = None
+        accum_raster = gen_accum_raster(d8_raster, config.paths.hydrocon_processed)
+
     # 11. Optional: generate wetland polygons
     wetlands_path = None
     if generate_wetlands:
@@ -177,6 +184,7 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
             depth_llim=config.depth_llim,
             area_llim=config.area_llim,
             volume_llim=config.volume_llim,
+            accum_raster_path = accum_raster
         )
 
     # 12. Calculate depression depths per subbasin

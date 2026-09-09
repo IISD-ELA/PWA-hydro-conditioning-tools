@@ -146,6 +146,8 @@ class PwaConfig:
     dem_source_dir: Optional[Path] = None
     # Set to False to skip step 12 (depression-depth summary per subbasin).
     summarize_by_subbasin: bool = True
+    # Set to True to enable wetland catchment analysis.
+    wetland_catchments: bool = False
 
     def __post_init__(self) -> None:
         if not self.watershed_name:
