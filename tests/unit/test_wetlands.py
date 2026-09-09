@@ -23,7 +23,7 @@ from pwa_tools.wetlands import (
     _VOLUME_THRESHOLD_M3,
     gen_wetland_polygons,
     gen_direction_raster,
-    gen_accumulation_raster
+    gen_accum_raster
 )
 
 
@@ -88,15 +88,17 @@ def test_gen_direction_raster(tmp_path: Path) -> None:
     assert output_path.exists()
 
 
-def test_gen_accumulation_raster(tmp_path: Path) -> None:
-    """Step 10d: gen_accumulation_raster() must invoke WBT d8_flow_accumulation on the direction raster."""
+
+
+def test_gen_accum_raster(tmp_path: Path) -> None:
+    """Step 10d: gen_accum_raster() must invoke WBT d8_flow_accum on the direction raster."""
     # Arrange: a flow-direction raster as input and the output location for accumulation
     direction_path = _write_depression_raster(tmp_path / "direction.tif", np.ones((10, 10)))
-    output_path = tmp_path / "accumulation.tif"
+    output_path = tmp_path / "accum.tif"
 
     fake_wbt = _make_fake_wbt()
 
-    # Stub d8_flow_accumulation to write a known constant raster so the result is checkable
+    # Stub d8_flow_accum to write a known constant raster so the result is checkable
     def _run_d8_flow_accum(**kwargs):
         _write_depression_raster(Path(kwargs["output"]), np.full((10, 10), 5.0))
         return 0
@@ -108,7 +110,7 @@ def test_gen_accumulation_raster(tmp_path: Path) -> None:
         mock_session.return_value.__enter__ = lambda s: fake_wbt
         mock_session.return_value.__exit__ = MagicMock(return_value=False)
 
-        result_path = gen_accumulation_raster(direction_path, output_path)
+        result_path = gen_accum_raster(direction_path, output_path)
 
     # Assert: WBT was invoked exactly once and the output raster carries the stubbed value
     fake_wbt.d8_flow_accum.assert_called_once()
@@ -293,3 +295,27 @@ def test_imperial_columns_present_and_accurate(tmp_path: Path) -> None:
     assert pytest.approx(row["vol_acft"], rel=1e-4) == row["volume_m3"] / _M3_PER_ACFT
     assert pytest.approx(row["med_dep_ft"], rel=1e-4) == row["med_dep_m"] * _FT_PER_M
 
+def test_catchment_area_in_wetlands_polygon(tmp_path: Path) -> None:
+    """Step 11: zonal stats added to gen_wetland_polygons() — max flow accumulation
+    value per wetland used to estimate contributing catchment area."""
+    # Depression raster: one 20x20 wetland block at 0.5 m depth, 10 m pixels
+    # → area = 40,000 m² (passes default 4,000 m² area threshold)
+    dep_data = np.zeros((30, 30))
+    dep_data[5:25, 5:25] = 0.5
+    depressions_path = _write_depression_raster(tmp_path / "dep.tif", dep_data, pixel_size_m=10.0)
+
+    # Accumulation raster on the same grid, with one outlet cell inside the wetland
+    # whose value implies a contributing area larger than the wetland's own footprint
+    accum_data = np.ones((30, 30))
+    accum_data[15, 15] = 500.0  # 500 cells * 100 m²/cell = 50,000 m² > 40,000 m² wetland area
+    accum_path = _write_depression_raster(tmp_path / "accum.tif", accum_data, pixel_size_m=10.0)
+
+    _, gdf = gen_wetland_polygons(
+        depressions_path,
+        tmp_path / "out",
+        accum_raster_path=accum_path,
+    )
+
+    assert len(gdf) == 1
+    assert "wet_cat_m2" in gdf.columns
+    assert (gdf["wet_cat_m2"] > gdf["area_m2"]).all()
