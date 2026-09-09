@@ -18,6 +18,7 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from pwa_tools._wbt import wbt_session, check_wbt
 import rasterio
 import rasterio.features
 from scipy.ndimage import label
@@ -31,11 +32,73 @@ _AREA_THRESHOLD_M2 = 4000    # minimum wetland area
 _VOLUME_THRESHOLD_M3 = 30   # minimum wetland storage volume
 
 
-def gen_accumulation_raster(direction_path, output_path):
-    pass
 
-def gen_direction_raster(dem_path, output_path):
-    pass
+def gen_direction_raster(
+    dem_path: Path,
+    output_path: Path,
+) -> Path:
+    """Generate a D8 flow-direction raster from an elevation DEM via WBT ``d8_pointer``.
+
+    Parameters
+    ----------
+    dem_path
+        Elevation DEM raster, float-valued (``.tif``).
+    output_path
+        Where to write the D8 pointer raster (``.tif``).
+
+    Returns
+    -------
+    Path
+        *output_path* (same value passed in, for chaining convenience).
+    """
+    dem_path = Path(dem_path)
+    output_path = Path(output_path)
+
+    with wbt_session() as wbt:
+        check_wbt(
+            wbt.d8_pointer(
+                dem=str(dem_path),
+                output=str(output_path),
+            ),
+            "d8_pointer",
+        )
+
+    logger.info("Generated D8 direction raster → %s", output_path.name)
+    return output_path
+
+def gen_accumulation_raster(
+    direction_path: Path,
+    output_path: Path,
+) -> Path:
+    """Generate a flow-accumulation raster from a D8 pointer via WBT ``d8_flow_accumulation``.
+
+    Parameters
+    ----------
+    direction_path
+        D8 flow-direction (pointer) raster, e.g. from ``gen_direction_raster`` (``.tif``).
+    output_path
+        Where to write the flow-accumulation raster (``.tif``).
+
+    Returns
+    -------
+    Path
+        *output_path* (same value passed in, for chaining convenience).
+    """
+    direction_path = Path(direction_path)
+    output_path = Path(output_path)
+
+    with wbt_session() as wbt:
+        check_wbt(
+            wbt.d8_flow_accum(
+                i=str(direction_path),
+                output=str(output_path),
+                pntr=True,  # input is already a D8 pointer, not a raw DEM
+            ),
+            "d8_flow_accum",
+        )
+
+    logger.info("Generated flow accumulation raster → %s", output_path.name)
+    return output_path
 
 
 def gen_wetland_polygons(

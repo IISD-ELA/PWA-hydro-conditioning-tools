@@ -76,7 +76,7 @@ def test_gen_direction_raster(tmp_path: Path) -> None:
     fake_wbt.d8_pointer.side_effect = _run_d8_pointer
 
     # Replace the real WBT session context manager with our fake so no external tool runs
-    with patch("pwa_tools.depression.wbt_session") as mock_session:
+    with patch("pwa_tools.wetlands.wbt_session") as mock_session:
         mock_session.return_value.__enter__ = lambda s: fake_wbt
         mock_session.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -104,7 +104,7 @@ def test_gen_accumulation_raster(tmp_path: Path) -> None:
     fake_wbt.d8_flow_accum.side_effect = _run_d8_flow_accum
 
     # Replace the real WBT session context manager with our fake so no external tool runs
-    with patch("pwa_tools.depression.wbt_session") as mock_session:
+    with patch("pwa_tools.wetlands.wbt_session") as mock_session:
         mock_session.return_value.__enter__ = lambda s: fake_wbt
         mock_session.return_value.__exit__ = MagicMock(return_value=False)
 
