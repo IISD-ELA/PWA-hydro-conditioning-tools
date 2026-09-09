@@ -173,7 +173,7 @@ def gen_wetland_polygons(
         "wetland_id": np.arange(len(areas_m2)),
         "area_m2": areas_m2,
         "volume_m3": volumes_m3,
-        "median_depth_m": medians,
+        "med_dep_m": medians,
     })
 
     # Filter out background + small features
@@ -211,7 +211,7 @@ def gen_wetland_polygons(
     # Imperial unit columns (for final output only; all processing remains metric)
     gdf["area_ac"]   = gdf["area_m2"]       / 4046.8564224
     gdf["vol_acft"]  = gdf["volume_m3"]      / 1233.4818375
-    gdf["med_dep_ft"] = gdf["median_depth_m"] * 3.28084
+    gdf["med_dep_ft"] = gdf["med_dep_m"] * 3.28084
 
     # Write shapefile (skip when no wetlands pass the filter)
     output_shapefile = output_dir / "Wetlands_Polygons_with_Stats.shp"

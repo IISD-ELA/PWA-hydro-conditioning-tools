@@ -291,5 +291,5 @@ def test_imperial_columns_present_and_accurate(tmp_path: Path) -> None:
 
     assert pytest.approx(row["area_ac"], rel=1e-4) == row["area_m2"] / _M2_PER_ACRE
     assert pytest.approx(row["vol_acft"], rel=1e-4) == row["volume_m3"] / _M3_PER_ACFT
-    assert pytest.approx(row["med_dep_ft"], rel=1e-4) == row["median_depth_m"] * _FT_PER_M
+    assert pytest.approx(row["med_dep_ft"], rel=1e-4) == row["med_dep_m"] * _FT_PER_M
 
