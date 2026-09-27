@@ -35,7 +35,7 @@ _VOLUME_THRESHOLD_M3 = 30   # minimum wetland storage volume
 
 def gen_direction_raster(
     dem_path: Path,
-    output_path: Path,
+    output_dir: Path,
 ) -> Path:
     """Generate a D8 flow-direction raster from an elevation DEM via WBT ``d8_pointer``.
 
@@ -43,16 +43,18 @@ def gen_direction_raster(
     ----------
     dem_path
         Elevation DEM raster, float-valued (``.tif``).
-    output_path
-        Where to write the D8 pointer raster (``.tif``).
+    output_dir
+        Directory where to write the D8 pointer raster (``.tif``).
 
     Returns
     -------
     Path
-        *output_path* (same value passed in, for chaining convenience).
+        Full path to the generated D8 pointer raster (inside *output_dir*).
     """
     dem_path = Path(dem_path)
-    output_path = Path(output_path)
+    stem = dem_path.stem
+    output_path = Path(output_dir) / (stem + "_d8.tif")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with wbt_session() as wbt:
         check_wbt(
@@ -68,7 +70,7 @@ def gen_direction_raster(
 
 def gen_accum_raster(
     direction_path: Path,
-    output_path: Path,
+    output_dir: Path,
 ) -> Path:
     """Generate a flow-accumulation raster from a D8 pointer via WBT ``d8_flow_accumulation``.
 
@@ -76,8 +78,8 @@ def gen_accum_raster(
     ----------
     direction_path
         D8 flow-direction (pointer) raster, e.g. from ``gen_direction_raster`` (``.tif``).
-    output_path
-        Where to write the flow-accumulation raster (``.tif``).
+    output_dir
+        Directory where to write the flow-accumulation raster (``.tif``).
 
     Returns
     -------
@@ -85,16 +87,18 @@ def gen_accum_raster(
         *output_path* (same value passed in, for chaining convenience).
     """
     direction_path = Path(direction_path)
-    output_path = Path(output_path)
+    stem = direction_path.stem
+    output_path = Path(output_dir) / (stem + "_accum.tif")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     with wbt_session() as wbt:
         check_wbt(
-            wbt.d8_flow_accum(
+            wbt.d8_flow_accumulation(
                 i=str(direction_path),
                 output=str(output_path),
                 pntr=True,  # input is already a D8 pointer, not a raw DEM
             ),
-            "d8_flow_accum",
+            "d8_flow_accumulation",
         )
 
     logger.info("Generated flow accumulation raster → %s", output_path.name)
@@ -238,6 +242,9 @@ def gen_wetland_polygons(
     gdf["area_ac"]   = gdf["area_m2"]       / 4046.8564224
     gdf["vol_acft"]  = gdf["volume_m3"]      / 1233.4818375
     gdf["med_dep_ft"] = gdf["med_dep_m"] * 3.28084
+
+    if "wet_cat_m2" in gdf.columns:
+        gdf["wet_cat_ac"] = gdf["wet_cat_m2"] / 4046.8564224
 
     # Write shapefile (skip when no wetlands pass the filter)
     output_shapefile = output_dir / "Wetlands_Polygons_with_Stats.shp"

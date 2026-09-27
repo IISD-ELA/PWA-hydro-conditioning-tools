@@ -192,6 +192,7 @@ class PwaConfig:
         dem_source_dir_raw = data.get("dem_source_dir")
         dem_source_dir = Path(dem_source_dir_raw) if dem_source_dir_raw else None
         summarize_by_subbasin = bool(data.get("summarize_by_subbasin", True))
+        wetland_catchments = bool(data.get("wetland_catchments", False))
         return cls(
             watershed_name=watershed_name,
             paths=paths,
@@ -203,6 +204,7 @@ class PwaConfig:
             volume_llim=volume_llim,
             dem_source_dir=dem_source_dir,
             summarize_by_subbasin=summarize_by_subbasin,
+            wetland_catchments=wetland_catchments,
         )
 
     @classmethod

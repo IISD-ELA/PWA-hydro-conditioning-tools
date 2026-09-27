@@ -172,8 +172,10 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     if config.wetland_catchments:
         d8_raster = gen_direction_raster(depression_raster, config.paths.hydrocon_processed)
         # 10d. Optional: Generate accumulation raster for wetland catchment analysis if enabled
-        accum_raster = None
         accum_raster = gen_accum_raster(d8_raster, config.paths.hydrocon_processed)
+
+    else:
+        accum_raster = None
 
     # 11. Optional: generate wetland polygons
     wetlands_path = None
