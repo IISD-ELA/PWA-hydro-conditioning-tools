@@ -248,6 +248,7 @@ def gen_wetland_polygons(
 
     if "wet_cat_m2" in gdf.columns:
         gdf["wet_cat_ac"] = gdf["wet_cat_m2"] / 4046.8564224
+        gdf["ip_ratio"] = gdf["wet_cat_m2"] / gdf["area_m2"]
 
     # Write shapefile (skip when no wetlands pass the filter)
     output_shapefile = output_dir / "Wetlands_Polygons_with_Stats.shp"
