@@ -220,6 +220,9 @@ def gen_wetland_polygons(
         stats_df["wet_cat_m2"] = np.asarray(max_accum) * accum_pixel_area
         del accum_data
 
+        # For wetlands where the catchment area is less than the wetland area, set the catchment area to null
+        stats_df.loc[stats_df["wet_cat_m2"] < stats_df["area_m2"], "wet_cat_m2"] = np.nan
+
     polygons = []
     labels_out = []
     for geom, val in rasterio.features.shapes(

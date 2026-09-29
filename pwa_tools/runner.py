@@ -159,18 +159,14 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         config.paths.hydrocon_processed
         / f"{lidar_resampled.stem}_FillBurn_Deps_Corr.tif"
     )
-    depression_raster = gen_depressions_raster(
+    depression_raster, filled_raster = gen_depressions_raster(
         lidar_resampled, nhn_clipped_path, depression_output,
     )
 
-    # 10b. Resample depression raster to output resolution
-    depression_raster = resample_lidar_raster(
-        depression_raster, resolution_m=config.output_res_m,
-    )
+    # 10a. Optional d8 processing for wetland catchment analysis
 
-    # 10c. Optional d8 processing for wetland catchment analysis
     if config.wetland_catchments:
-        d8_raster = gen_direction_raster(depression_raster, config.paths.hydrocon_processed)
+        d8_raster = gen_direction_raster(filled_raster, config.paths.hydrocon_processed)
         # 10d. Optional: Generate accumulation raster for wetland catchment analysis if enabled
         accum_raster = gen_accum_raster(d8_raster, config.paths.hydrocon_processed)
 
@@ -200,6 +196,11 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
             config.paths.hydrocon_processed,
             resolution_m=config.processing_res_m,
         )
+
+    # 13. Resample depression raster to output resolution
+    depression_raster = resample_lidar_raster(
+        depression_raster, resolution_m=config.output_res_m,
+    )
 
     logger.info("Step 0 complete. Depression depths → %s", depression_depths and depression_depths.name)
     return Step0Result(

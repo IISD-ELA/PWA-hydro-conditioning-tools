@@ -60,17 +60,65 @@ def gen_depressions_raster(
 
     stem = lidar_resampled_path.stem
     parent = lidar_resampled_path.parent
+    hc_path = parent / f"{stem}_HC.tif"
     fill_burn_path = parent / f"{stem}_FillBurn.tif"
     deps_path = parent / f"{stem}_FillBurn_Deps.tif"
+    nhn_raster_path = parent / f"{nhn_projected_path.stem}.tif"
+
+    ## Burn the streamlines into the DEM with a specified burn depth
+    
+    # ...existing code...
+    
+    nhn_gdf = gpd.read_file(nhn_projected_path)
+    
+    with rasterio.open(lidar_resampled_path) as ref:
+        transform = ref.transform
+        out_shape = (ref.height, ref.width)
+        crs = ref.crs
+
+    burned = rasterio.features.rasterize(
+        [(geom, 1) for geom in nhn_gdf.geometry],
+        out_shape=out_shape,
+        transform=transform,
+        fill=0,
+        dtype="uint8",
+    )
+
+    profile = {
+    "driver": "GTiff",
+    "height": out_shape[0],
+    "width": out_shape[1],
+    "count": 1,
+    "dtype": "uint8",
+    "crs": crs,
+    "transform": transform,
+    "nodata": 0,
+    }
+
+    with rasterio.open(nhn_raster_path, "w", **profile) as dst:
+        dst.write(burned, 1)
+
+    with rasterio.open(lidar_resampled_path) as dem, rasterio.open(nhn_raster_path) as nhn:
+        dem_data = dem.read(1).astype('float32')
+        nhn_data = nhn.read(1)
+        profile = dem.profile
+        burn_depth = 10
+        dem_data[(nhn_data > 0) & nhn_data != nhn.nodata] -= burn_depth
+
+    profile.update(dtype="float32")
+    with rasterio.open(hc_path, "w", **profile) as dst:
+        dst.write(dem_data, 1)
+
+# Fille depressions while "fixing flats" to better resolve flow accumulation
 
     with wbt_session() as wbt:
         check_wbt(
-            wbt.fill_burn(
-                dem=str(lidar_resampled_path),
-                streams=str(nhn_projected_path),
+            wbt.fill_depressions(
+                dem=str(hc_path),
+                fix_flats = True,
                 output=str(fill_burn_path),
             ),
-            "fill_burn",
+            "fill_depressions",
         )
 
         check_wbt(
@@ -93,7 +141,7 @@ def gen_depressions_raster(
         )
 
     logger.info("Generated depressions raster → %s", output_path.name)
-    return output_path
+    return output_path, fill_burn_path
 
 
 def calc_depression_depths(
