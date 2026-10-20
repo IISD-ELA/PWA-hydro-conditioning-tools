@@ -1,4 +1,6 @@
-"""Unit tests for pwa_tools.wetlands — threshold parameter behaviour.
+"""Unit tests for pwa_tools.wetlands — catchment size estimates and threshold parameter behaviour.
+
+This module contains unit tests for the wetlands functionality in pwa_tools. This includes testing of the catchment size estimates and the behaviour of threshold parameters.
 
 These tests exercise the optional depth_llim / area_llim / volume_llim
 arguments added to gen_wetland_polygons without touching the filesystem
@@ -64,7 +66,7 @@ def test_gen_direction_raster(tmp_path: Path) -> None:
     """Step 10c: gen_direction_raster() must invoke WBT d8_pointer and return the output path."""
     # Arrange: a flat DEM and the output location the function under test should write to
     dem_path = _write_depression_raster(tmp_path / "dem.tif", np.ones((10, 10)))
-    output_path = tmp_path / "direction.tif"
+    output_path = tmp_path
 
     fake_wbt = _make_fake_wbt()
 
@@ -84,7 +86,7 @@ def test_gen_direction_raster(tmp_path: Path) -> None:
 
     # Assert: WBT was invoked exactly once and the expected output file was produced
     fake_wbt.d8_pointer.assert_called_once()
-    assert result_path == output_path
+    assert result_path == output_path / "dem_d8.tif"
     assert output_path.exists()
 
 
@@ -93,8 +95,10 @@ def test_gen_direction_raster(tmp_path: Path) -> None:
 def test_gen_accum_raster(tmp_path: Path) -> None:
     """Step 10d: gen_accum_raster() must invoke WBT d8_flow_accum on the direction raster."""
     # Arrange: a flow-direction raster as input and the output location for accumulation
-    direction_path = _write_depression_raster(tmp_path / "direction.tif", np.ones((10, 10)))
-    output_path = tmp_path / "accum.tif"
+    direction_path = _write_depression_raster(
+        tmp_path / "direction.tif", np.random.uniform(1, 100, (10, 10))
+    )
+    output_path = tmp_path
 
     fake_wbt = _make_fake_wbt()
 
@@ -103,7 +107,7 @@ def test_gen_accum_raster(tmp_path: Path) -> None:
         _write_depression_raster(Path(kwargs["output"]), np.full((10, 10), 5.0))
         return 0
 
-    fake_wbt.d8_flow_accum.side_effect = _run_d8_flow_accum
+    fake_wbt.d8_flow_accumulation.side_effect = _run_d8_flow_accum
 
     # Replace the real WBT session context manager with our fake so no external tool runs
     with patch("pwa_tools.wetlands.wbt_session") as mock_session:
@@ -113,9 +117,9 @@ def test_gen_accum_raster(tmp_path: Path) -> None:
         result_path = gen_accum_raster(direction_path, output_path)
 
     # Assert: WBT was invoked exactly once and the output raster carries the stubbed value
-    fake_wbt.d8_flow_accum.assert_called_once()
-    assert result_path == output_path
-    with rasterio.open(output_path) as src:
+    fake_wbt.d8_flow_accumulation.assert_called_once()
+    assert result_path == output_path / (direction_path.stem + "_accum.tif")
+    with rasterio.open(result_path) as src:
         assert src.read(1).max() == pytest.approx(5.0)
 
 
