@@ -279,6 +279,11 @@ def test_config_summarize_by_subbasin_roundtrips_via_to_dict(tmp_path: Path) -> 
     config = PwaConfig.from_dict(_config_dict(tmp_path, summarize_by_subbasin=False))
     assert PwaConfig.from_dict(config.to_dict()).summarize_by_subbasin is False
 
+def test_config_wetland_catchments_defaults_to_false(tmp_path: Path) -> None:
+    """wetland_catchments should default to False when omitted from the config dict."""
+    config = PwaConfig.from_dict(_config_dict(tmp_path))
+    assert config.wetland_catchments is False
+
 
 # ============ Input-file validation ============
 

@@ -44,8 +44,17 @@ class PwaPaths:
 
     @classmethod
     def from_watershed(cls, base_data: Path, watershed_name: str) -> "PwaPaths":
-        """Derive the standard PWA directory layout from base + name. No I/O."""
-        base_data = Path(base_data)
+        """Derive the standard PWA directory layout from base + name. No I/O.
+
+        ``base_data`` is resolved to an absolute path (``Path.resolve()`` does
+        not touch the filesystem when the path doesn't exist yet). Relative
+        paths must be resolved here because WhiteboxTools' CLI binary is
+        launched from its own install directory (``pwa_tools/WBT/``) — a
+        relative path like ``tests/fixtures/...`` would be interpreted
+        relative to that directory instead of the caller's cwd, causing
+        "file not found" panics in the Rust binary.
+        """
+        base_data = Path(base_data).resolve()
         watershed = base_data / watershed_name
         hydrocon = watershed / "HydroConditioning"
         return cls(
@@ -146,6 +155,8 @@ class PwaConfig:
     dem_source_dir: Optional[Path] = None
     # Set to False to skip step 12 (depression-depth summary per subbasin).
     summarize_by_subbasin: bool = True
+    # Set to True to enable wetland catchment analysis.
+    wetland_catchments: bool = False
 
     def __post_init__(self) -> None:
         if not self.watershed_name:
@@ -190,6 +201,7 @@ class PwaConfig:
         dem_source_dir_raw = data.get("dem_source_dir")
         dem_source_dir = Path(dem_source_dir_raw) if dem_source_dir_raw else None
         summarize_by_subbasin = bool(data.get("summarize_by_subbasin", True))
+        wetland_catchments = bool(data.get("wetland_catchments", False))
         return cls(
             watershed_name=watershed_name,
             paths=paths,
@@ -201,6 +213,7 @@ class PwaConfig:
             volume_llim=volume_llim,
             dem_source_dir=dem_source_dir,
             summarize_by_subbasin=summarize_by_subbasin,
+            wetland_catchments=wetland_catchments,
         )
 
     @classmethod

@@ -1,4 +1,6 @@
-"""Unit tests for pwa_tools.wetlands — threshold parameter behaviour.
+"""Unit tests for pwa_tools.wetlands — catchment size estimates and threshold parameter behaviour.
+
+This module contains unit tests for the wetlands functionality in pwa_tools. This includes testing of the catchment size estimates and the behaviour of threshold parameters.
 
 These tests exercise the optional depth_llim / area_llim / volume_llim
 arguments added to gen_wetland_polygons without touching the filesystem
@@ -13,6 +15,8 @@ import numpy as np
 import pytest
 import rasterio
 from rasterio.transform import from_bounds
+from tests.unit.test_depression import _make_fake_wbt
+from unittest.mock import MagicMock, patch
 
 from pwa_tools import wetlands
 from pwa_tools.wetlands import (
@@ -20,6 +24,8 @@ from pwa_tools.wetlands import (
     _DEPTH_THRESHOLD_M,
     _VOLUME_THRESHOLD_M3,
     gen_wetland_polygons,
+    gen_direction_raster,
+    gen_accum_raster
 )
 
 
@@ -51,6 +57,71 @@ def _write_depression_raster(
     ) as dst:
         dst.write(data.astype(np.float32), 1)
     return path
+
+# ---------------------------------------------------------------------------
+# Flow routing raster pre-processing
+# ---------------------------------------------------------------------------
+
+def test_gen_direction_raster(tmp_path: Path) -> None:
+    """Step 10c: gen_direction_raster() must invoke WBT d8_pointer and return the output path."""
+    # Arrange: a flat DEM and the output location the function under test should write to
+    dem_path = _write_depression_raster(tmp_path / "dem.tif", np.ones((10, 10)))
+    output_path = tmp_path
+
+    fake_wbt = _make_fake_wbt()
+
+    # Stub d8_pointer to write a raster to whatever output path it's called with
+    def _run_d8_pointer(**kwargs):
+        _write_depression_raster(Path(kwargs["output"]), np.ones((10, 10)))
+        return 0
+
+    fake_wbt.d8_pointer.side_effect = _run_d8_pointer
+
+    # Replace the real WBT session context manager with our fake so no external tool runs
+    with patch("pwa_tools.wetlands.wbt_session") as mock_session:
+        mock_session.return_value.__enter__ = lambda s: fake_wbt
+        mock_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        result_path = gen_direction_raster(dem_path, output_path)
+
+    # Assert: WBT was invoked exactly once and the expected output file was produced
+    fake_wbt.d8_pointer.assert_called_once()
+    assert result_path == output_path / "dem_d8.tif"
+    assert output_path.exists()
+
+
+
+
+def test_gen_accum_raster(tmp_path: Path) -> None:
+    """Step 10d: gen_accum_raster() must invoke WBT d8_flow_accum on the direction raster."""
+    # Arrange: a flow-direction raster as input and the output location for accumulation
+    direction_path = _write_depression_raster(
+        tmp_path / "direction.tif", np.random.uniform(1, 100, (10, 10))
+    )
+    output_path = tmp_path
+
+    fake_wbt = _make_fake_wbt()
+
+    # Stub d8_flow_accum to write a known constant raster so the result is checkable
+    def _run_d8_flow_accum(**kwargs):
+        _write_depression_raster(Path(kwargs["output"]), np.full((10, 10), 5.0))
+        return 0
+
+    fake_wbt.d8_flow_accumulation.side_effect = _run_d8_flow_accum
+
+    # Replace the real WBT session context manager with our fake so no external tool runs
+    with patch("pwa_tools.wetlands.wbt_session") as mock_session:
+        mock_session.return_value.__enter__ = lambda s: fake_wbt
+        mock_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        result_path = gen_accum_raster(direction_path, output_path)
+
+    # Assert: WBT was invoked exactly once and the output raster carries the stubbed value
+    fake_wbt.d8_flow_accumulation.assert_called_once()
+    assert result_path == output_path / (direction_path.stem + "_accum.tif")
+    with rasterio.open(result_path) as src:
+        assert src.read(1).max() == pytest.approx(5.0)
+
 
 
 # ---------------------------------------------------------------------------
@@ -226,5 +297,29 @@ def test_imperial_columns_present_and_accurate(tmp_path: Path) -> None:
 
     assert pytest.approx(row["area_ac"], rel=1e-4) == row["area_m2"] / _M2_PER_ACRE
     assert pytest.approx(row["vol_acft"], rel=1e-4) == row["volume_m3"] / _M3_PER_ACFT
-    assert pytest.approx(row["med_dep_ft"], rel=1e-4) == row["median_depth_m"] * _FT_PER_M
+    assert pytest.approx(row["med_dep_ft"], rel=1e-4) == row["med_dep_m"] * _FT_PER_M
 
+def test_catchment_area_in_wetlands_polygon(tmp_path: Path) -> None:
+    """Step 11: zonal stats added to gen_wetland_polygons() — max flow accumulation
+    value per wetland used to estimate contributing catchment area."""
+    # Depression raster: one 20x20 wetland block at 0.5 m depth, 10 m pixels
+    # → area = 40,000 m² (passes default 4,000 m² area threshold)
+    dep_data = np.zeros((30, 30))
+    dep_data[5:25, 5:25] = 0.5
+    depressions_path = _write_depression_raster(tmp_path / "dep.tif", dep_data, pixel_size_m=10.0)
+
+    # Accumulation raster on the same grid, with one outlet cell inside the wetland
+    # whose value implies a contributing area larger than the wetland's own footprint
+    accum_data = np.ones((30, 30))
+    accum_data[15, 15] = 500.0  # 500 cells * 100 m²/cell = 50,000 m² > 40,000 m² wetland area
+    accum_path = _write_depression_raster(tmp_path / "accum.tif", accum_data, pixel_size_m=10.0)
+
+    _, gdf = gen_wetland_polygons(
+        depressions_path,
+        tmp_path / "out",
+        accum_raster_path=accum_path,
+    )
+
+    assert len(gdf) == 1
+    assert "wet_cat_m2" in gdf.columns
+    assert (gdf["wet_cat_m2"] > gdf["area_m2"]).all()

@@ -18,4 +18,4 @@ checkpoints, and 22 mixed-responsibility functions) was split into
 and ``ui.py`` during the 2026 refactor.
 """
 
-__version__ = "1.1.3"
+__version__ = "1.1.8"

@@ -18,9 +18,10 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from pwa_tools._wbt import wbt_session, check_wbt
 import rasterio
 import rasterio.features
-from scipy.ndimage import label
+from scipy.ndimage import label, maximum as label_maximum
 from shapely.geometry import shape as shapely_shape
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,79 @@ _AREA_THRESHOLD_M2 = 4000    # minimum wetland area
 _VOLUME_THRESHOLD_M3 = 30   # minimum wetland storage volume
 
 
+
+def gen_direction_raster(
+    dem_path: Path,
+    output_dir: Path,
+) -> Path:
+    """Generate a D8 flow-direction raster from an elevation DEM via WBT ``d8_pointer``.
+
+    Parameters
+    ----------
+    dem_path
+        Elevation DEM raster, float-valued (``.tif``).
+    output_dir
+        Directory where to write the D8 pointer raster (``.tif``).
+
+    Returns
+    -------
+    Path
+        Full path to the generated D8 pointer raster (inside *output_dir*).
+    """
+    dem_path = Path(dem_path)
+    stem = dem_path.stem
+    output_path = Path(output_dir) / (stem + "_d8.tif")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with wbt_session() as wbt:
+        check_wbt(
+            wbt.d8_pointer(
+                dem=str(dem_path),
+                output=str(output_path),
+            ),
+            "d8_pointer",
+        )
+
+    logger.info("Generated D8 direction raster → %s", output_path.name)
+    return output_path
+
+def gen_accum_raster(
+    direction_path: Path,
+    output_dir: Path,
+) -> Path:
+    """Generate a flow-accumulation raster from a D8 pointer via WBT ``d8_flow_accumulation``.
+
+    Parameters
+    ----------
+    direction_path
+        D8 flow-direction (pointer) raster, e.g. from ``gen_direction_raster`` (``.tif``).
+    output_dir
+        Directory where to write the flow-accumulation raster (``.tif``).
+
+    Returns
+    -------
+    Path
+        *output_path* (same value passed in, for chaining convenience).
+    """
+    direction_path = Path(direction_path)
+    stem = direction_path.stem
+    output_path = Path(output_dir) / (stem + "_accum.tif")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with wbt_session() as wbt:
+        check_wbt(
+            wbt.d8_flow_accumulation(
+                i=str(direction_path),
+                output=str(output_path),
+                pntr=True,  # input is already a D8 pointer, not a raw DEM
+            ),
+            "d8_flow_accumulation",
+        )
+
+    logger.info("Generated flow accumulation raster → %s", output_path.name)
+    return output_path
+
+
 def gen_wetland_polygons(
     depressions_raster_path: Path,
     output_dir: Path,
@@ -38,6 +112,7 @@ def gen_wetland_polygons(
     depth_llim: float = _DEPTH_THRESHOLD_M,
     area_llim: float = _AREA_THRESHOLD_M2,
     volume_llim: float = _VOLUME_THRESHOLD_M3,
+    accum_raster_path: Path | None = None,
 ) -> tuple[Path, gpd.GeoDataFrame]:
     """Generate wetland polygons with area/volume/depth statistics from a depression raster.
 
@@ -56,6 +131,11 @@ def gen_wetland_polygons(
     ``_AREA_THRESHOLD_M2``, and ``_VOLUME_THRESHOLD_M3``.  Pass explicit
     values (e.g. from a :class:`~pwa_tools.config.PwaConfig`) to override
     them for a specific dataset without editing the source.
+
+    ``accum_raster_path`` is optional. When given, it must share the
+    depression raster's grid (same shape). The max flow-accumulation value
+    per wetland is used to add a ``wet_cat_m2`` column estimating the
+    contributing catchment area.
 
     See ``test_wetlands_docstring_cites_live_constants``.
 
@@ -78,6 +158,7 @@ def gen_wetland_polygons(
     # Label connected depressions (wetlands)
     structure = np.ones((3, 3), dtype=int) # Specify 8-connectivity for labeling (diagonal and orthogonal neighbors)
     labeled_array, num_features = label(valid_mask, structure=structure) # Create labels for each "wetland" (connected pixels in the mask)
+    del valid_mask
 
     flat_labels = labeled_array.ravel() # Flatten
     flat_depths = depression_data.ravel() # Flatten
@@ -97,13 +178,14 @@ def gen_wetland_polygons(
         depths_by_label[label_val].append(depth)
     for label_val, depth_list in depths_by_label.items():
         medians[label_val] = np.median(depth_list)
+    del flat_labels, flat_depths, depression_data
 
     # Build statistics dataframe
     stats_df = pd.DataFrame({
         "wetland_id": np.arange(len(areas_m2)),
         "area_m2": areas_m2,
         "volume_m3": volumes_m3,
-        "median_depth_m": medians,
+        "med_dep_m": medians,
     })
 
     # Filter out background + small features
@@ -119,6 +201,27 @@ def gen_wetland_polygons(
     # Vectorize remaining wetland polygons
     valid_ids = set(stats_df["wetland_id"])
     valid_mask_vec = np.isin(labeled_array, list(valid_ids))
+
+    # Zonal stats: max flow accumulation per wetland → estimated contributing catchment area
+    if accum_raster_path is not None:
+        accum_raster_path = Path(accum_raster_path)
+        with rasterio.open(accum_raster_path) as accum_src:
+            accum_data = accum_src.read(1)
+            accum_pixel_area = abs(accum_src.transform[0] * accum_src.transform[4])
+
+        if accum_data.shape != labeled_array.shape:
+            raise ValueError(
+                "accum_raster_path must share the depression raster's grid "
+                f"(got {accum_data.shape}, expected {labeled_array.shape})"
+            )
+
+        wetland_ids = stats_df["wetland_id"].tolist()
+        max_accum = label_maximum(accum_data, labeled_array, index=wetland_ids)
+        stats_df["wet_cat_m2"] = np.asarray(max_accum) * accum_pixel_area
+        del accum_data
+
+        # For wetlands where the catchment area is less than the wetland area, set the catchment area to null
+        stats_df.loc[stats_df["wet_cat_m2"] < stats_df["area_m2"], "wet_cat_m2"] = np.nan
 
     polygons = []
     labels_out = []
@@ -141,7 +244,11 @@ def gen_wetland_polygons(
     # Imperial unit columns (for final output only; all processing remains metric)
     gdf["area_ac"]   = gdf["area_m2"]       / 4046.8564224
     gdf["vol_acft"]  = gdf["volume_m3"]      / 1233.4818375
-    gdf["med_dep_ft"] = gdf["median_depth_m"] * 3.28084
+    gdf["med_dep_ft"] = gdf["med_dep_m"] * 3.28084
+
+    if "wet_cat_m2" in gdf.columns:
+        gdf["wet_cat_ac"] = gdf["wet_cat_m2"] / 4046.8564224
+        gdf["ip_ratio"] = gdf["wet_cat_m2"] / gdf["area_m2"]
 
     # Write shapefile (skip when no wetlands pass the filter)
     output_shapefile = output_dir / "Wetlands_Polygons_with_Stats.shp"

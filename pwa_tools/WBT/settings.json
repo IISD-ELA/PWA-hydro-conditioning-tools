@@ -1,6 +1,6 @@
 {
   "verbose_mode": true,
-  "working_directory": "c:\\Users\\emilito\\Documents\\PWA\\Data\\Raw\\manning\\WB_Data\\",
+  "working_directory": "C:\\Users\\tsaleh\\Code_Workspace\\GIS-Projects\\PWA-hydro-conditioning-tools\\",
   "compress_rasters": false,
   "max_procs": -1
 }

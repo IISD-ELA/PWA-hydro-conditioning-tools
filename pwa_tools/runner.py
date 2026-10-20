@@ -41,7 +41,7 @@ from pwa_tools.io.raster import (
 from pwa_tools.io.shapefile import read_shapefile
 from pwa_tools.projection import project_subbasins_to_lidar, project_subbasins_to_nhn
 from pwa_tools.streams import clip_nhn_to_watershed
-from pwa_tools.wetlands import gen_wetland_polygons
+from pwa_tools.wetlands import gen_accum_raster, gen_direction_raster, gen_wetland_polygons
 
 logger = logging.getLogger(__name__)
 
@@ -132,9 +132,12 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     # 6. Resample to processing resolution
     lidar_resampled = resample_lidar_raster(lidar_clipped, resolution_m=config.processing_res_m)
 
-    # 7. Load NHN streams shapefile
+    # 7. Load NHN streams shapefile. Do NOT reproject here — clip_nhn_to_watershed
+    #    (step 9) clips the raw, un-reprojected .shp file on disk using WhiteboxTools,
+    #    so the clip polygon built from nhn_gdf.crs below must match that file's
+    #    native CRS, not the project CRS, or Clip silently returns zero records.
     nhn_path = config.paths.hydrocon_raw / f"{config.inputs.nhn_filename}.shp"
-    nhn_gdf = read_shapefile(nhn_path, target_crs=config.inputs.crs_string)
+    nhn_gdf = read_shapefile(nhn_path)
 
     # 8. Project subbasins to NHN CRS (for clipping)
     _nhn_projected_gdf, nhn_proj_path = project_subbasins_to_nhn(
@@ -159,14 +162,19 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         config.paths.hydrocon_processed
         / f"{lidar_resampled.stem}_FillBurn_Deps_Corr.tif"
     )
-    depression_raster = gen_depressions_raster(
+    depression_raster, filled_raster = gen_depressions_raster(
         lidar_resampled, nhn_clipped_path, depression_output,
     )
 
-    # 10b. Resample depression raster to output resolution
-    depression_raster = resample_lidar_raster(
-        depression_raster, resolution_m=config.output_res_m,
-    )
+    # 10a. Optional d8 processing for wetland catchment analysis
+
+    if config.wetland_catchments:
+        d8_raster = gen_direction_raster(filled_raster, config.paths.hydrocon_processed)
+        # 10d. Optional: Generate accumulation raster for wetland catchment analysis if enabled
+        accum_raster = gen_accum_raster(d8_raster, config.paths.hydrocon_processed)
+
+    else:
+        accum_raster = None
 
     # 11. Optional: generate wetland polygons
     wetlands_path = None
@@ -177,6 +185,7 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
             depth_llim=config.depth_llim,
             area_llim=config.area_llim,
             volume_llim=config.volume_llim,
+            accum_raster_path = accum_raster
         )
 
     # 12. Calculate depression depths per subbasin
@@ -190,6 +199,11 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
             config.paths.hydrocon_processed,
             resolution_m=config.processing_res_m,
         )
+
+    # 13. Resample depression raster to output resolution
+    depression_raster = resample_lidar_raster(
+        depression_raster, resolution_m=config.output_res_m,
+    )
 
     logger.info("Step 0 complete. Depression depths → %s", depression_depths and depression_depths.name)
     return Step0Result(
