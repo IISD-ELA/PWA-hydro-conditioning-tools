@@ -3,7 +3,7 @@ Python module for hydro conditioning Prairie watersheds. Part of the Prairie Wat
 
 ## For developers
 
-This package is built for use in the PWA-hydro-conditioning-main product repository and the PWA developer repository. Updates to functions in this package must be tested for backwards compatibility with PWA-hydro-conditioning-main before being merged.
+This package is built for use in the PWA-modeling product repository and the PWA developer repository. Updates to functions in this package must be tested for backwards compatibility with PWA-modeling before being merged.
 
 ### Branches
 

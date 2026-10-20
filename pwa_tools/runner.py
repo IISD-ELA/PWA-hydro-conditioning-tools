@@ -1,6 +1,6 @@
 """Step 0 pipeline orchestration — the hydro-conditioning workflow.
 
-Replaces ``PWA-hydro-conditioning-main/hydro_condition.py`` with a function
+Replaces ``PWA-modeling/hydro_condition.py`` with a function
 that accepts a :class:`~pwa_tools.config.PwaConfig` and calls the extracted
 domain modules in sequence. No global state, no ``input()`` calls.
 

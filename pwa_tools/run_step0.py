@@ -20,7 +20,7 @@ The CLI is a thin wrapper around :func:`pwa_tools.runner.run_step0`. It
 mirrors the entry-point pattern used by ``pwa_raven.run_nc_processing``
 and ``pwa_raven.run_raven_inputs`` so users have one mental model across
 all pipeline steps. The ``hydro_condition_v2.py`` script in the
-``PWA-hydro-conditioning-main`` repo is a backwards-compatibility shim
+``PWA-modeling`` repo is a backwards-compatibility shim
 that calls into this module.
 """
 
