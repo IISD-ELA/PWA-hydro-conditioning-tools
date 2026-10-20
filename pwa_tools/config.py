@@ -44,8 +44,17 @@ class PwaPaths:
 
     @classmethod
     def from_watershed(cls, base_data: Path, watershed_name: str) -> "PwaPaths":
-        """Derive the standard PWA directory layout from base + name. No I/O."""
-        base_data = Path(base_data)
+        """Derive the standard PWA directory layout from base + name. No I/O.
+
+        ``base_data`` is resolved to an absolute path (``Path.resolve()`` does
+        not touch the filesystem when the path doesn't exist yet). Relative
+        paths must be resolved here because WhiteboxTools' CLI binary is
+        launched from its own install directory (``pwa_tools/WBT/``) — a
+        relative path like ``tests/fixtures/...`` would be interpreted
+        relative to that directory instead of the caller's cwd, causing
+        "file not found" panics in the Rust binary.
+        """
+        base_data = Path(base_data).resolve()
         watershed = base_data / watershed_name
         hydrocon = watershed / "HydroConditioning"
         return cls(

@@ -132,9 +132,12 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     # 6. Resample to processing resolution
     lidar_resampled = resample_lidar_raster(lidar_clipped, resolution_m=config.processing_res_m)
 
-    # 7. Load NHN streams shapefile
+    # 7. Load NHN streams shapefile. Do NOT reproject here — clip_nhn_to_watershed
+    #    (step 9) clips the raw, un-reprojected .shp file on disk using WhiteboxTools,
+    #    so the clip polygon built from nhn_gdf.crs below must match that file's
+    #    native CRS, not the project CRS, or Clip silently returns zero records.
     nhn_path = config.paths.hydrocon_raw / f"{config.inputs.nhn_filename}.shp"
-    nhn_gdf = read_shapefile(nhn_path, target_crs=config.inputs.crs_string)
+    nhn_gdf = read_shapefile(nhn_path)
 
     # 8. Project subbasins to NHN CRS (for clipping)
     _nhn_projected_gdf, nhn_proj_path = project_subbasins_to_nhn(

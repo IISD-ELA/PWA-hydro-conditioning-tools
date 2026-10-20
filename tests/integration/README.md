@@ -31,5 +31,5 @@ make integration
 PWA_STEP0_CONFIG=/path/to/pwa_config.yml pytest tests/integration -v
 
 #(Windows):
-$env:PWA_STEP0_CONFIG="tests/fixtures/grassmere_test.yml"; pytest tests/integration -v
+$env:PWA_STEP0_CONFIG="tests/fixtures/cypress_test.yml"; pytest tests/integration -v
 ```

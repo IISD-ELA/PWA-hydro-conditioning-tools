@@ -1,0 +1,66 @@
+# Example configuration for the PWA Step 0 hydro-conditioning pipeline.
+#
+# Copy this to pwa_config.yml and edit, OR generate one interactively:
+#     python -m pwa_tools.init_config pwa_config.yml
+#
+# Then run:
+#     python hydro_condition_v2.py [--config pwa_config.yml] [--wetlands]
+#
+# All input filenames are WITHOUT extension. The pipeline appends .shp
+# / .tif as appropriate. Files are expected at:
+#     <base_data_dir>/<watershed_name>/HydroConditioning/Raw/<filename>.<ext>
+#
+# Example values below are for the grassmere watershed — replace with
+# your own watershed's data.
+
+# Free-form watershed identifier; used for the working-directory name
+# and for state pickling. Letters / digits / underscores only.
+watershed_name: cypress_test
+
+# Root data directory. Input rasters/shapefiles go under
+# {base_data_dir}/{watershed_name}/HydroConditioning/Raw/.
+base_data_dir: ./local/data/
+
+inputs:
+  # Hydrofabric subbasins shapefile (CLRH or equivalent). Filename without
+  # the .shp suffix.
+  clrh_filename: finalcat_info_v1-1
+
+  # LiDAR DEM raster(s). Single string OR a list — multiple rasters are
+  # automatically merged. Filenames without the .tif suffix.
+  lidar_filenames:
+    - upper_cypress
+    - lower_cypress
+  # Multi-raster example:
+  # lidar_filenames:
+  #   - tile_north
+  #   - tile_south
+
+  # NHN streams shapefile. Filename without the .shp suffix.
+  nhn_filename: NHN_05MH000_3_0_HN_NLFLOW_1
+
+  # Optional culvert lines shapefile (linestring geometry). Set to null
+  # or omit if you don't have one.
+  culvert_filename: null
+
+  # CRS for the working coordinate system, EPSG code only (e.g. EPSG:3158
+  # for NAD83(CSRS) MTM zone 14, used in southern Manitoba).
+  crs_string: EPSG:3158
+
+# Optional parameters: 
+# Output resolution for the processed rasters, in meters.
+output_res_m: 10
+
+# Processing resolution for the intermediate rasters, in meters.
+processing_res_m: 5
+
+# Whether to generate wetlands. Set to true or false.
+generate_wetlands: true
+
+# Minimum depth, area, and volume for wetlands, in meters.
+depth_llim: 0.1
+area_llim: 100
+volume_llim: 10
+
+# Whether to generate an accumulation raster. Set to true or false.
+accumulation_raster: true

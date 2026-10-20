@@ -139,7 +139,11 @@ def clip_nhn_to_watershed(
     clrh_proj_nhn_path = Path(clrh_proj_nhn_path)
 
     nhn_input = raw_dir / f"{nhn_filename}.shp"
-    nhn_clipped = raw_dir / f"{nhn_filename}.shp"  # WBT overwrites in-place
+    # Write to a distinct file in interim_dir rather than overwriting the raw
+    # input in place: WBT's Clip tool creates/truncates the output file while
+    # still streaming records from the input, so input == output corrupts the
+    # shapefile mid-read and crashes with a "path not found" panic.
+    nhn_clipped = interim_dir / f"{nhn_filename}_clip.shp"
 
     with wbt_session() as wbt:
         check_wbt(

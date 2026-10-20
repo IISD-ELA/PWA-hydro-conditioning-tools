@@ -136,6 +136,10 @@ def wbt_session() -> Generator:
             this_dir = Path(__file__).resolve().parent
             wbt.set_whitebox_dir(str(this_dir / "WBT"))
 
+        # run_tool chdirs into the binary directory, so relative paths would
+        # resolve there; --wd makes WBT resolve them against the caller's cwd.
+        wbt.set_working_dir(original_dir)
+
         yield wbt
     finally:
         os.chdir(original_dir)
