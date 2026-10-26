@@ -67,15 +67,16 @@ def gen_depressions_raster(
 
     ## Burn the streamlines into the DEM with a specified burn depth
     
-    # ...existing code...
-    
+       
     nhn_gdf = gpd.read_file(nhn_projected_path)
-    
+
+    # Get the transform, shape, and CRS from the reference DEM
     with rasterio.open(lidar_resampled_path) as ref:
         transform = ref.transform
         out_shape = (ref.height, ref.width)
         crs = ref.crs
 
+    # Generate a rasterized version of the NHN streams for burning into the DEM
     burned = rasterio.features.rasterize(
         [(geom, 1) for geom in nhn_gdf.geometry],
         out_shape=out_shape,
@@ -98,6 +99,7 @@ def gen_depressions_raster(
     with rasterio.open(nhn_raster_path, "w", **profile) as dst:
         dst.write(burned, 1)
 
+    # Apply the NHN burn to the DEM by subtracting a fixed burn depth
     with rasterio.open(lidar_resampled_path) as dem, rasterio.open(nhn_raster_path) as nhn:
         dem_data = dem.read(1).astype('float32')
         nhn_data = nhn.read(1)
@@ -109,7 +111,7 @@ def gen_depressions_raster(
     with rasterio.open(hc_path, "w", **profile) as dst:
         dst.write(dem_data, 1)
 
-# Fille depressions while "fixing flats" to better resolve flow accumulation
+    # Fill depressions while "fixing flats" to better resolve flow accumulation
 
     with wbt_session() as wbt:
         check_wbt(
@@ -121,6 +123,7 @@ def gen_depressions_raster(
             "fill_depressions",
         )
 
+        # Subtract the original DEM to get only depression depths
         check_wbt(
             wbt.raster_calculator(
                 output=str(deps_path),
@@ -129,6 +132,7 @@ def gen_depressions_raster(
             "raster_calculator",
         )
 
+        # Remove any artificial negative values from the depression raster
         check_wbt(
             wbt.conditional_evaluation(
                 i=str(deps_path),

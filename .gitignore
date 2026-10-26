@@ -21,6 +21,7 @@ htmlcov/
 # Local tooling config
 .gh_config/
 .github/*
+pwa_tools/WBT/settings.json
 
 Processed/
 
