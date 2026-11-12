@@ -2,12 +2,16 @@
 
 The rest of run_step0's pipeline (LiDAR resampling, stream clipping,
 depression generation, ...) is already exercised end-to-end with real
-WhiteboxTools/gdal in tests/regression/. This file isolates the one
-behaviour this change introduces: gen_wetland_catchment_polygons is called
--- using the Raw/ points file and the D8/accumulation rasters already
-produced for wetland_catchments -- only when
-config.inputs.wetland_points_filename is set, and its result lands in
-Step0Result.wetland_catchment_polygons.
+WhiteboxTools/gdal in tests/regression/. This file isolates the behaviour
+this change introduces: gen_wetland_catchment_polygons is called -- using
+the Raw/ points file and the D8/accumulation rasters already produced for
+wetland_catchments -- only when config.inputs.wetland_points_filename is
+set, and its result lands in Step0Result.wetland_catchment_polygons. It
+also covers the fail-fast guard: wetland_points_filename requires
+generate_wetlands=True (catchment labeling needs the wetland polygons that
+flag produces), and run_step0 must raise before touching the pipeline if
+the caller didn't pass it, rather than silently overriding the caller's
+choice.
 
 Every externally-imported pipeline function is stubbed out: this file is
 about wiring, not pipeline science.
@@ -16,6 +20,8 @@ about wiring, not pipeline science.
 from __future__ import annotations
 
 from pathlib import Path
+
+import pytest
 
 from pwa_tools.config import PwaConfig, PwaPaths
 from pwa_tools.runner import run_step0
@@ -116,7 +122,7 @@ def test_run_step0_calls_catchment_delineation_when_points_configured(
     config = _build_config(tmp_path, wetland_points_filename="wetland_points")
     calls = _patch_pipeline(monkeypatch, tmp_path)
 
-    result = run_step0(config)
+    result = run_step0(config, generate_wetlands=True)
 
     catchments_call = calls["catchments_call"]
     assert catchments_call["points_path"] == config.paths.hydrocon_raw / "wetland_points.shp"
@@ -141,16 +147,18 @@ def test_run_step0_skips_catchment_delineation_when_points_not_configured(
     assert "gen_wetland_polygons_called" not in calls
 
 
-def test_run_step0_forces_wetland_polygons_when_points_configured_but_flag_omitted(
+def test_run_step0_raises_when_points_configured_but_generate_wetlands_false(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """generate_wetlands=False (the CLI default) must not suppress wetland
-    polygon generation when wetland_points_filename needs it for ID lookup."""
+    """wetland_points_filename needs the wetland polygons generate_wetlands
+    produces for ID lookup. run_step0 must raise early -- not silently force
+    generate_wetlands on -- when the caller leaves it False (the CLI
+    default)."""
     config = _build_config(tmp_path, wetland_points_filename="wetland_points")
     calls = _patch_pipeline(monkeypatch, tmp_path)
 
-    result = run_step0(config, generate_wetlands=False)
+    with pytest.raises(ValueError, match="generate_wetlands"):
+        run_step0(config, generate_wetlands=False)
 
-    assert calls.get("gen_wetland_polygons_called") is True
-    assert result.wetlands == tmp_path / "wetlands.shp"
-    assert "catchments_call" in calls
+    # Must fail fast, before any pipeline stub (e.g. stage_inputs) runs.
+    assert calls == {}
