@@ -1,9 +1,10 @@
-"""Wetland polygon generation from depression rasters.
+"""Wetland polygon and catchment-geometry generation from depression rasters.
 
 Replaces ``gen_wetland_polygons`` (lines 741-839) from the god file.
 
-Standalone module — no WBT, no subprocess, no cross-module dependencies.
-Pure rasterio + numpy + scipy analysis.
+Uses WhiteboxTools (via ``pwa_tools._wbt``) for D8/flow-accumulation/
+catchment delineation, and ``pwa_tools.io.shapefile`` for vector I/O;
+otherwise pure rasterio + numpy + scipy analysis.
 
 Changes: pathlib paths, explicit output directory, no state reads/writes,
 logging instead of print.
@@ -19,8 +20,10 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 from pwa_tools._wbt import wbt_session, check_wbt
+from pwa_tools.io.shapefile import read_shapefile
 import rasterio
 import rasterio.features
+import rasterio.transform
 from scipy.ndimage import label, maximum as label_maximum
 from shapely.geometry import shape as shapely_shape
 
@@ -30,6 +33,10 @@ logger = logging.getLogger(__name__)
 _DEPTH_THRESHOLD_M = 0.1   # ignore depressions shallower than 10 cm
 _AREA_THRESHOLD_M2 = 4000    # minimum wetland area
 _VOLUME_THRESHOLD_M3 = 30   # minimum wetland storage volume
+
+# Maximum distance (map units, typically metres) WBT snap_pour_points may
+# move a user-marked point to reach the nearest high-flow-accumulation cell.
+_SNAP_DIST_M = 20.0
 
 
 
@@ -263,3 +270,206 @@ def gen_wetland_polygons(
             "No wetland polygons met the filter thresholds; shapefile not written."
         )
     return output_shapefile, gdf
+
+
+def gen_wetland_catchment_polygons(
+    points_path: Path,
+    wetlands_path: Path,
+    direction_raster_path: Path,
+    accum_raster_path: Path,
+    output_dir: Path,
+    *,
+    id_field: str = "wetland_id",
+    snap_dist: float = _SNAP_DIST_M,
+) -> tuple[Path, gpd.GeoDataFrame]:
+    """Delineate full contributing-catchment polygons for user-selected wetlands.
+
+    Computing a catchment polygon for every wetland in a watershed is
+    expensive at the scale of hundreds or thousands of wetlands.
+    ``gen_wetland_polygons`` already provides a cheap per-wetland catchment
+    *area* estimate (``wet_cat_m2``) from the max flow-accumulation value.
+    This function instead delineates real catchment *geometry*, but only for
+    wetlands a user has flagged by placing a point — typically after
+    reviewing the wetland polygons shapefile in a GIS.
+
+    Points need no attributes: each point's wetland identity is borrowed
+    from the nearest polygon in *wetlands_path* (wetlands produced by
+    :func:`gen_wetland_polygons` never overlap, so "nearest" is always an
+    unambiguous match).
+
+    Steps:
+      1. Read the points and wetland polygons, reprojecting both to the
+         D8 raster's CRS.
+      2. Assign each point the ``id_field`` value of its nearest wetland
+         polygon.
+      3. Snap each point onto the nearest high-flow-accumulation cell with
+         WBT ``snap_pour_points`` (forgives imprecise manual placement).
+      4. Delineate the full upstream contributing area for every snapped
+         point in one WBT ``watershed`` call.
+      5. Vectorize the watershed raster and label each polygon by sampling
+         the raster at its originating point's (snapped) location —
+         independent of however WhiteboxTools numbers pour points
+         internally.
+
+    Parameters
+    ----------
+    points_path
+        User-marked wetland-of-interest points (``.shp`` or any
+        geopandas-readable format). No attributes required.
+    wetlands_path
+        Wetland polygons shapefile with an ``id_field`` column, e.g. the
+        output of :func:`gen_wetland_polygons`.
+    direction_raster_path
+        D8 pointer raster, e.g. from :func:`gen_direction_raster`.
+    accum_raster_path
+        Flow-accumulation raster on the same grid as *direction_raster_path*,
+        e.g. from :func:`gen_accum_raster`.
+    output_dir
+        Directory for all outputs (intermediate pour points, the watershed
+        raster, and the final catchment-polygons shapefile).
+    id_field
+        Column in *wetlands_path* identifying each wetland. Carried through
+        to the output catchment polygons.
+    snap_dist
+        Maximum distance (map units) WBT ``snap_pour_points`` may move a
+        point to reach the nearest high-flow-accumulation cell. Defaults to
+        the module-level constant ``_SNAP_DIST_M``.
+
+    Returns
+    -------
+    tuple[Path, gpd.GeoDataFrame]
+        Path to the written catchment-polygons shapefile, and the
+        corresponding GeoDataFrame (``id_field``, ``catchment_m2``,
+        ``catchment_ac``, geometry). Points whose snapped location produces
+        no catchment (nodata or outside the raster extent) are logged and
+        excluded, not fatal.
+    """
+    direction_raster_path = Path(direction_raster_path)
+    accum_raster_path = Path(accum_raster_path)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    with rasterio.open(direction_raster_path) as d8_src:
+        raster_crs = d8_src.crs
+        d8_shape = d8_src.shape
+
+    with rasterio.open(accum_raster_path) as accum_src:
+        accum_shape = accum_src.shape
+
+    if d8_shape != accum_shape:
+        raise ValueError(
+            "direction_raster_path and accum_raster_path must share the same "
+            f"grid (got {d8_shape}, expected {accum_shape})"
+        )
+
+    raster_crs_wkt = raster_crs.to_wkt()
+    points_gdf = read_shapefile(points_path, target_crs=raster_crs_wkt)
+    wetlands_gdf = read_shapefile(wetlands_path, target_crs=raster_crs_wkt)
+
+    if id_field not in wetlands_gdf.columns:
+        raise ValueError(
+            f"wetlands_path is missing the '{id_field}' column needed to "
+            "label catchment polygons."
+        )
+    if points_gdf.empty:
+        raise ValueError("points_path contains no points to delineate catchments for.")
+    if wetlands_gdf.empty:
+        raise ValueError("wetlands_path contains no wetland polygons to match points against.")
+
+    # Borrow each point's wetland identity from the nearest wetland polygon.
+    # Wetlands produced by gen_wetland_polygons are spatially distinct
+    # (non-overlapping), so "nearest" is always an unambiguous match.
+    points_gdf = gpd.sjoin_nearest(
+        points_gdf[["geometry"]], wetlands_gdf[[id_field, "geometry"]], how="left",
+    )
+    points_gdf = points_gdf[~points_gdf.index.duplicated(keep="first")]
+    points_gdf = points_gdf[["geometry", id_field]].reset_index(drop=True)
+
+    raw_points_path = output_dir / "_wetland_catchment_pour_points.shp"
+    points_gdf.to_file(raw_points_path)
+
+    snapped_points_path = output_dir / "_wetland_catchment_pour_points_snapped.shp"
+    watershed_raster_path = output_dir / "_wetland_catchment_basins.tif"
+
+    with wbt_session() as wbt:
+        check_wbt(
+            wbt.snap_pour_points(
+                pour_pts=str(raw_points_path),
+                flow_accum=str(accum_raster_path),
+                output=str(snapped_points_path),
+                snap_dist=snap_dist,
+            ),
+            "snap_pour_points",
+        )
+        check_wbt(
+            wbt.watershed(
+                d8_pntr=str(direction_raster_path),
+                pour_pts=str(snapped_points_path),
+                output=str(watershed_raster_path),
+            ),
+            "watershed",
+        )
+
+    snapped_gdf = gpd.read_file(snapped_points_path)
+
+    with rasterio.open(watershed_raster_path) as ws_src:
+        watershed_data = ws_src.read(1)
+        ws_transform = ws_src.transform
+        ws_nodata = ws_src.nodata
+        ws_crs = ws_src.crs
+
+    # Map each raster "basin" value back to the id_field of the point it was
+    # delineated from, by sampling the raster at that point's (snapped)
+    # location. Robust to however WhiteboxTools numbers pour points internally.
+    value_to_id: dict[int, object] = {}
+    for wid, geom in zip(points_gdf[id_field], snapped_gdf.geometry):
+        row, col = rasterio.transform.rowcol(ws_transform, geom.x, geom.y)
+        if not (0 <= row < watershed_data.shape[0] and 0 <= col < watershed_data.shape[1]):
+            logger.warning(
+                "Snapped pour point for wetland %s fell outside the watershed "
+                "raster — skipped.", wid,
+            )
+            continue
+        value = watershed_data[row, col]
+        if ws_nodata is not None and value == ws_nodata:
+            logger.warning(
+                "Snapped pour point for wetland %s produced no catchment "
+                "(nodata) — skipped.", wid,
+            )
+            continue
+        value_to_id[int(value)] = wid
+
+    valid_values = set(value_to_id)
+    mask = (
+        np.isin(watershed_data, list(valid_values))
+        if valid_values
+        else np.zeros_like(watershed_data, dtype=bool)
+    )
+
+    polygons = []
+    ids = []
+    for geom, val in rasterio.features.shapes(
+        watershed_data.astype(np.int32), mask=mask, transform=ws_transform,
+    ):
+        if val in valid_values:
+            polygons.append(shapely_shape(geom))
+            ids.append(value_to_id[val])
+
+    gdf = gpd.GeoDataFrame({id_field: ids, "geometry": polygons}, crs=ws_crs)
+    if not gdf.empty:
+        gdf = gdf.dissolve(by=id_field, aggfunc="first").reset_index()
+        gdf["catchment_m2"] = gdf.geometry.area
+        gdf["catchment_ac"] = gdf["catchment_m2"] / 4046.8564224
+
+    output_path = output_dir / "Wetland_Catchment_Polygons.shp"
+    if not gdf.empty:
+        gdf.to_file(output_path)
+        logger.info(
+            "Generated %d wetland catchment polygon(s) → %s",
+            len(gdf), output_path.name,
+        )
+    else:
+        logger.info(
+            "No wetland catchments could be delineated; shapefile not written."
+        )
+    return output_path, gdf

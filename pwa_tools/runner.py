@@ -41,7 +41,12 @@ from pwa_tools.io.raster import (
 from pwa_tools.io.shapefile import read_shapefile
 from pwa_tools.projection import project_subbasins_to_lidar, project_subbasins_to_nhn
 from pwa_tools.streams import clip_nhn_to_watershed
-from pwa_tools.wetlands import gen_accum_raster, gen_direction_raster, gen_wetland_polygons
+from pwa_tools.wetlands import (
+    gen_accum_raster,
+    gen_direction_raster,
+    gen_wetland_catchment_polygons,
+    gen_wetland_polygons,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +58,7 @@ class Step0Result:
     depression_raster: Path
     depression_depths: Optional[Path] = None
     wetlands: Optional[Path] = None
+    wetland_catchment_polygons: Optional[Path] = None
 
 
 def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result:
@@ -64,7 +70,10 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         Validated pipeline configuration (paths + input filenames + CRS).
     generate_wetlands
         If True, also generate the wetland polygons shapefile (not required
-        for Raven but useful for analysis).
+        for Raven but useful for analysis). Forced on automatically when
+        ``config.inputs.wetland_points_filename`` is set, since catchment
+        delineation needs the wetland polygons to look up each point's
+        wetland_id.
 
     Returns
     -------
@@ -73,6 +82,11 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         optionally the wetlands shapefile.
     """
     logger.info("Starting Step 0 for watershed '%s'", config.watershed_name)
+
+    # A points file needs the wetland polygons it borrows wetland_id from,
+    # so generate_wetlands=False (the CLI default) must not suppress step 11
+    # when wetland_points_filename is configured.
+    generate_wetlands = generate_wetlands or bool(config.inputs.wetland_points_filename)
 
     # 0. Search the data hierarchy for input files, move them to Raw/,
     #    and fail fast if any are missing — saves the user from a
@@ -174,6 +188,7 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         accum_raster = gen_accum_raster(d8_raster, config.paths.hydrocon_processed)
 
     else:
+        d8_raster = None
         accum_raster = None
 
     # 11. Optional: generate wetland polygons
@@ -186,6 +201,22 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
             area_llim=config.area_llim,
             volume_llim=config.volume_llim,
             accum_raster_path = accum_raster
+        )
+
+    # 11b. Optional: delineate catchment geometry for user-marked wetlands.
+    #     wetland_points_filename implies wetland_catchments (validated in
+    #     PwaConfig), so d8_raster/accum_raster/wetlands_path are available.
+    wetland_catchment_polygons_path = None
+    if config.inputs.wetland_points_filename:
+        points_path = (
+            config.paths.hydrocon_raw / f"{config.inputs.wetland_points_filename}.shp"
+        )
+        wetland_catchment_polygons_path, _catchments_gdf = gen_wetland_catchment_polygons(
+            points_path,
+            wetlands_path,
+            d8_raster,
+            accum_raster,
+            config.paths.hydrocon_processed,
         )
 
     # 12. Calculate depression depths per subbasin
@@ -210,4 +241,5 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         depression_raster=depression_raster,
         depression_depths=depression_depths,
         wetlands=wetlands_path,
+        wetland_catchment_polygons=wetland_catchment_polygons_path,
     )

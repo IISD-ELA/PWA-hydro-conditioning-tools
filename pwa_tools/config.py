@@ -114,6 +114,10 @@ class PwaInputs:
     nhn_filename: str
     crs_string: str
     culvert_filename: Optional[str] = None
+    # User-marked wetland-of-interest points for catchment geometry
+    # delineation (see pwa_tools.wetlands.gen_wetland_catchment_polygons).
+    # Only meaningful when PwaConfig.wetland_catchments is True.
+    wetland_points_filename: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not self.clrh_filename:
@@ -165,6 +169,12 @@ class PwaConfig:
             raise ValueError(f"output_res_m must be positive, got: {self.output_res_m}")
         if self.processing_res_m <= 0:
             raise ValueError(f"processing_res_m must be positive, got: {self.processing_res_m}")
+        if self.inputs.wetland_points_filename and not self.wetland_catchments:
+            raise ValueError(
+                "inputs.wetland_points_filename requires wetland_catchments=True "
+                "(catchment delineation needs the D8/flow-accumulation rasters "
+                "that flag produces)."
+            )
 
     @classmethod
     def from_dict(cls, data: dict) -> "PwaConfig":
@@ -185,6 +195,7 @@ class PwaConfig:
         # Treat missing/empty culvert as None — the legacy code used "" as the
         # absence sentinel. Normalize at the boundary.
         culvert = inputs_data.get("culvert_filename") or None
+        wetland_points = inputs_data.get("wetland_points_filename") or None
 
         inputs = PwaInputs(
             clrh_filename=inputs_data["clrh_filename"],
@@ -192,6 +203,7 @@ class PwaConfig:
             nhn_filename=inputs_data["nhn_filename"],
             crs_string=inputs_data["crs_string"],
             culvert_filename=culvert,
+            wetland_points_filename=wetland_points,
         )
         output_res_m = float(data.get("output_res_m", 5.0))
         processing_res_m = float(data.get("processing_res_m", 2.0))
@@ -242,9 +254,10 @@ class PwaConfig:
         """Paths the pipeline expects to find on disk before run_step0 starts.
 
         Returns the resolved paths to the CLRH shapefile, every LiDAR raster,
-        the NHN shapefile, and (if specified) the culvert shapefile. Sidecars
-        like ``.dbf``/``.shx`` are not enumerated — geopandas will fail with a
-        clear error if they're missing alongside a present ``.shp``.
+        the NHN shapefile, and (if specified) the culvert and wetland-points
+        shapefiles. Sidecars like ``.dbf``/``.shx`` are not enumerated —
+        geopandas will fail with a clear error if they're missing alongside
+        a present ``.shp``.
         """
         raw = self.paths.hydrocon_raw
         files: list[Path] = []
@@ -254,6 +267,8 @@ class PwaConfig:
         files.append(raw / f"{self.inputs.nhn_filename}.shp")
         if self.inputs.culvert_filename:
             files.append(raw / f"{self.inputs.culvert_filename}.shp")
+        if self.inputs.wetland_points_filename:
+            files.append(raw / f"{self.inputs.wetland_points_filename}.shp")
         return files
 
     def _input_search_dirs(self) -> list[Path]:
@@ -457,11 +472,13 @@ class PwaConfig:
             "volume_llim": self.volume_llim,
             "dem_source_dir": str(self.dem_source_dir) if self.dem_source_dir is not None else None,
             "summarize_by_subbasin": self.summarize_by_subbasin,
+            "wetland_catchments": self.wetland_catchments,
             "inputs": {
                 "clrh_filename": self.inputs.clrh_filename,
                 "lidar_filenames": list(self.inputs.lidar_filenames),
                 "nhn_filename": self.inputs.nhn_filename,
                 "culvert_filename": self.inputs.culvert_filename,
+                "wetland_points_filename": self.inputs.wetland_points_filename,
                 "crs_string": self.inputs.crs_string,
             },
         }
