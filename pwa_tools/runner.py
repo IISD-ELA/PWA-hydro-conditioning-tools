@@ -70,7 +70,7 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
         Validated pipeline configuration (paths + input filenames + CRS).
     generate_wetlands
         If True, also generate the wetland polygons shapefile (not required
-        for Raven but useful for analysis). Forced on automatically when
+        for Raven but useful for analysis). Required (must be True) when
         ``config.inputs.wetland_points_filename`` is set, since catchment
         delineation needs the wetland polygons to look up each point's
         wetland_id.
@@ -80,13 +80,25 @@ def run_step0(config: PwaConfig, generate_wetlands: bool = False) -> Step0Result
     Step0Result
         Paths to the depression depths shapefile, depression raster, and
         optionally the wetlands shapefile.
+
+    Raises
+    ------
+    ValueError
+        If ``config.inputs.wetland_points_filename`` is set but
+        ``generate_wetlands`` is False.
     """
     logger.info("Starting Step 0 for watershed '%s'", config.watershed_name)
 
     # A points file needs the wetland polygons it borrows wetland_id from,
-    # so generate_wetlands=False (the CLI default) must not suppress step 11
-    # when wetland_points_filename is configured.
-    generate_wetlands = generate_wetlands or bool(config.inputs.wetland_points_filename)
+    # so generate_wetlands=False (the CLI default) can't silently be
+    # overridden here — fail fast instead, before any pipeline work starts.
+    if config.inputs.wetland_points_filename and not generate_wetlands:
+        raise ValueError(
+            "config.inputs.wetland_points_filename is set but generate_wetlands "
+            "is False. Catchment delineation needs the wetland polygons "
+            "generate_wetlands produces to look up each point's wetland_id — "
+            "pass generate_wetlands=True (or --wetlands on the CLI)."
+        )
 
     # 0. Search the data hierarchy for input files, move them to Raw/,
     #    and fail fast if any are missing — saves the user from a
