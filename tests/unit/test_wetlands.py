@@ -11,10 +11,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import geopandas as gpd
 import numpy as np
 import pytest
 import rasterio
 from rasterio.transform import from_bounds
+from shapely.geometry import Point, box
 from tests.unit.test_depression import _make_fake_wbt
 from unittest.mock import MagicMock, patch
 
@@ -22,7 +24,9 @@ from pwa_tools import wetlands
 from pwa_tools.wetlands import (
     _AREA_THRESHOLD_M2,
     _DEPTH_THRESHOLD_M,
+    _SNAP_DIST_M,
     _VOLUME_THRESHOLD_M3,
+    gen_wetland_catchment_polygons,
     gen_wetland_polygons,
     gen_direction_raster,
     gen_accum_raster
@@ -57,6 +61,26 @@ def _write_depression_raster(
     ) as dst:
         dst.write(data.astype(np.float32), 1)
     return path
+
+
+def _write_wetlands_shapefile(
+    path: Path, records: list[tuple[int, object]], crs: str = "EPSG:32614",
+) -> Path:
+    """Write a minimal wetland-polygons shapefile with a wetland_id column."""
+    ids, geoms = zip(*records)
+    gdf = gpd.GeoDataFrame({"wetland_id": list(ids), "geometry": list(geoms)}, crs=crs)
+    gdf.to_file(path)
+    return path
+
+
+def _write_points_shapefile(
+    path: Path, coords: list[tuple[float, float]], crs: str = "EPSG:32614",
+) -> Path:
+    """Write a minimal points shapefile — no attributes required."""
+    gdf = gpd.GeoDataFrame(geometry=[Point(x, y) for x, y in coords], crs=crs)
+    gdf.to_file(path)
+    return path
+
 
 # ---------------------------------------------------------------------------
 # Flow routing raster pre-processing
@@ -323,3 +347,216 @@ def test_catchment_area_in_wetlands_polygon(tmp_path: Path) -> None:
     assert len(gdf) == 1
     assert "wet_cat_m2" in gdf.columns
     assert (gdf["wet_cat_m2"] > gdf["area_m2"]).all()
+
+
+# ---------------------------------------------------------------------------
+# Wetland catchment geometry delineation from user-marked points
+# ---------------------------------------------------------------------------
+
+
+def test_catchment_signature_default_snap_dist_matches_module_constant() -> None:
+    """snap_dist and id_field must default to the documented values so the
+    runner (and standalone callers) get sensible behaviour when omitted."""
+    import inspect
+
+    sig = inspect.signature(gen_wetland_catchment_polygons)
+    assert sig.parameters["snap_dist"].default == _SNAP_DIST_M
+    assert sig.parameters["id_field"].default == "wetland_id"
+
+
+def test_gen_wetland_catchment_polygons_assigns_id_from_nearest_wetland(tmp_path: Path) -> None:
+    """A delineated catchment's wetland_id is borrowed from the nearest wetland
+    polygon — the user-supplied points need no attributes at all. The stub
+    watershed raster uses non-sequential value codes (11, 22) to prove the
+    polygon-to-wetland mapping doesn't depend on WhiteboxTools' internal
+    pour-point numbering."""
+    pixel_size = 10.0
+    grid_shape = (10, 10)
+
+    d8_path = _write_depression_raster(tmp_path / "d8.tif", np.ones(grid_shape), pixel_size_m=pixel_size)
+    accum_path = _write_depression_raster(tmp_path / "accum.tif", np.ones(grid_shape), pixel_size_m=pixel_size)
+
+    # Two spatially distinct wetlands (wetlands never overlap by construction).
+    wetlands_path = _write_wetlands_shapefile(
+        tmp_path / "wetlands.shp",
+        [
+            (1, box(0, 70, 30, 100)),   # rows 0-2, cols 0-2
+            (2, box(60, 0, 90, 30)),    # rows 7-9, cols 6-8
+        ],
+    )
+    # User-marked points — one inside each wetland, no attributes required.
+    points_path = _write_points_shapefile(tmp_path / "points.shp", [(15.0, 85.0), (75.0, 15.0)])
+
+    fake_wbt = _make_fake_wbt()
+
+    def _run_snap_pour_points(**kwargs):
+        # Stub: pass points through unchanged. The real snapping math is
+        # WhiteboxTools' own domain, exercised for real in the integration test.
+        gpd.read_file(kwargs["pour_pts"]).to_file(kwargs["output"])
+        return 0
+
+    def _run_watershed(**kwargs):
+        data = np.full(grid_shape, -1.0, dtype=np.float32)
+        data[0:3, 0:3] = 11.0   # catchment for the wetland-1 point
+        data[7:10, 6:9] = 22.0  # catchment for the wetland-2 point
+        _write_depression_raster(Path(kwargs["output"]), data, pixel_size_m=pixel_size, nodata=-1.0)
+        return 0
+
+    fake_wbt.snap_pour_points.side_effect = _run_snap_pour_points
+    fake_wbt.watershed.side_effect = _run_watershed
+
+    with patch("pwa_tools.wetlands.wbt_session") as mock_session:
+        mock_session.return_value.__enter__ = lambda s: fake_wbt
+        mock_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        result_path, gdf = gen_wetland_catchment_polygons(
+            points_path, wetlands_path, d8_path, accum_path, tmp_path / "out",
+        )
+
+    fake_wbt.snap_pour_points.assert_called_once()
+    fake_wbt.watershed.assert_called_once()
+    assert result_path.exists()
+    assert set(gdf["wetland_id"]) == {1, 2}
+
+    by_id = gdf.set_index("wetland_id")
+    assert by_id.loc[1, "geometry"].contains(Point(15.0, 85.0))
+    assert by_id.loc[2, "geometry"].contains(Point(75.0, 15.0))
+    assert by_id.loc[1, "catchment_m2"] == pytest.approx(900.0)
+    assert by_id.loc[2, "catchment_m2"] == pytest.approx(900.0)
+    assert by_id.loc[1, "catchment_ac"] == pytest.approx(900.0 / 4046.8564224)
+
+
+def test_gen_wetland_catchment_polygons_passes_raster_paths_and_snap_dist(tmp_path: Path) -> None:
+    """snap_pour_points and watershed must receive the configured raster paths
+    and an overridden snap_dist."""
+    pixel_size = 10.0
+    grid_shape = (5, 5)
+    d8_path = _write_depression_raster(tmp_path / "d8.tif", np.ones(grid_shape), pixel_size_m=pixel_size)
+    accum_path = _write_depression_raster(tmp_path / "accum.tif", np.ones(grid_shape), pixel_size_m=pixel_size)
+    wetlands_path = _write_wetlands_shapefile(tmp_path / "wetlands.shp", [(1, box(0, 30, 50, 50))])
+    points_path = _write_points_shapefile(tmp_path / "points.shp", [(25.0, 40.0)])
+
+    fake_wbt = _make_fake_wbt()
+
+    def _run_snap_pour_points(**kwargs):
+        gpd.read_file(kwargs["pour_pts"]).to_file(kwargs["output"])
+        return 0
+
+    def _run_watershed(**kwargs):
+        data = np.full(grid_shape, -1.0, dtype=np.float32)
+        data[0:2, 1:4] = 7.0
+        _write_depression_raster(Path(kwargs["output"]), data, pixel_size_m=pixel_size, nodata=-1.0)
+        return 0
+
+    fake_wbt.snap_pour_points.side_effect = _run_snap_pour_points
+    fake_wbt.watershed.side_effect = _run_watershed
+
+    with patch("pwa_tools.wetlands.wbt_session") as mock_session:
+        mock_session.return_value.__enter__ = lambda s: fake_wbt
+        mock_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        gen_wetland_catchment_polygons(
+            points_path, wetlands_path, d8_path, accum_path, tmp_path / "out", snap_dist=42.0,
+        )
+
+    snap_kwargs = fake_wbt.snap_pour_points.call_args.kwargs
+    assert snap_kwargs["flow_accum"] == str(accum_path)
+    assert snap_kwargs["snap_dist"] == 42.0
+
+    watershed_kwargs = fake_wbt.watershed.call_args.kwargs
+    assert watershed_kwargs["d8_pntr"] == str(d8_path)
+
+
+def test_gen_wetland_catchment_polygons_raises_when_wetlands_missing_id_field(tmp_path: Path) -> None:
+    """A wetlands_path without the id_field column must fail fast, before any
+    WBT call is made."""
+    d8_path = _write_depression_raster(tmp_path / "d8.tif", np.ones((5, 5)), pixel_size_m=10.0)
+    accum_path = _write_depression_raster(tmp_path / "accum.tif", np.ones((5, 5)), pixel_size_m=10.0)
+
+    wetlands_gdf = gpd.GeoDataFrame({"id": [1]}, geometry=[box(0, 0, 50, 50)], crs="EPSG:32614")
+    wetlands_path = tmp_path / "wetlands.shp"
+    wetlands_gdf.to_file(wetlands_path)
+    points_path = _write_points_shapefile(tmp_path / "points.shp", [(25.0, 25.0)])
+
+    with pytest.raises(ValueError, match="wetland_id"):
+        gen_wetland_catchment_polygons(points_path, wetlands_path, d8_path, accum_path, tmp_path / "out")
+
+
+def test_gen_wetland_catchment_polygons_raises_on_grid_mismatch(tmp_path: Path) -> None:
+    """D8 pointer and flow-accumulation rasters on different grids must fail
+    fast, before even reading the points/wetlands files."""
+    d8_path = _write_depression_raster(tmp_path / "d8.tif", np.ones((10, 10)), pixel_size_m=10.0)
+    accum_path = _write_depression_raster(tmp_path / "accum.tif", np.ones((5, 5)), pixel_size_m=10.0)
+
+    with pytest.raises(ValueError, match="grid"):
+        gen_wetland_catchment_polygons(
+            Path("does_not_exist_points.shp"),
+            Path("does_not_exist_wetlands.shp"),
+            d8_path, accum_path, tmp_path / "out",
+        )
+
+
+def test_gen_wetland_catchment_polygons_raises_on_empty_points(tmp_path: Path) -> None:
+    """An empty points file must raise, not silently produce an empty result."""
+    d8_path = _write_depression_raster(tmp_path / "d8.tif", np.ones((5, 5)), pixel_size_m=10.0)
+    accum_path = _write_depression_raster(tmp_path / "accum.tif", np.ones((5, 5)), pixel_size_m=10.0)
+
+    empty_points = gpd.GeoDataFrame({"geometry": []}, crs="EPSG:32614")
+    wetlands_gdf = gpd.GeoDataFrame(
+        {"wetland_id": [1]}, geometry=[box(0, 0, 50, 50)], crs="EPSG:32614",
+    )
+
+    with patch("pwa_tools.wetlands.read_shapefile", side_effect=[empty_points, wetlands_gdf]):
+        with pytest.raises(ValueError, match="no points"):
+            gen_wetland_catchment_polygons(
+                Path("points.shp"), Path("wetlands.shp"), d8_path, accum_path, tmp_path / "out",
+            )
+
+
+def test_gen_wetland_catchment_polygons_skips_points_with_no_catchment(
+    tmp_path: Path, caplog,
+) -> None:
+    """A point whose snapped location lands on nodata in the watershed raster
+    is logged and excluded, without failing the whole batch."""
+    pixel_size = 10.0
+    grid_shape = (10, 10)
+    d8_path = _write_depression_raster(tmp_path / "d8.tif", np.ones(grid_shape), pixel_size_m=pixel_size)
+    accum_path = _write_depression_raster(tmp_path / "accum.tif", np.ones(grid_shape), pixel_size_m=pixel_size)
+
+    wetlands_path = _write_wetlands_shapefile(
+        tmp_path / "wetlands.shp",
+        [
+            (1, box(0, 70, 30, 100)),
+            (2, box(60, 0, 90, 30)),
+        ],
+    )
+    points_path = _write_points_shapefile(tmp_path / "points.shp", [(15.0, 85.0), (75.0, 15.0)])
+
+    fake_wbt = _make_fake_wbt()
+
+    def _run_snap_pour_points(**kwargs):
+        gpd.read_file(kwargs["pour_pts"]).to_file(kwargs["output"])
+        return 0
+
+    def _run_watershed(**kwargs):
+        # Only the wetland-1 point's location has a valid catchment; the
+        # wetland-2 point's snapped location lands on nodata.
+        data = np.full(grid_shape, -1.0, dtype=np.float32)
+        data[0:3, 0:3] = 11.0
+        _write_depression_raster(Path(kwargs["output"]), data, pixel_size_m=pixel_size, nodata=-1.0)
+        return 0
+
+    fake_wbt.snap_pour_points.side_effect = _run_snap_pour_points
+    fake_wbt.watershed.side_effect = _run_watershed
+
+    with patch("pwa_tools.wetlands.wbt_session") as mock_session:
+        mock_session.return_value.__enter__ = lambda s: fake_wbt
+        mock_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        with caplog.at_level("WARNING"):
+            _, gdf = gen_wetland_catchment_polygons(
+                points_path, wetlands_path, d8_path, accum_path, tmp_path / "out",
+            )
+
+    assert list(gdf["wetland_id"]) == [1]
+    assert "nodata" in caplog.text
