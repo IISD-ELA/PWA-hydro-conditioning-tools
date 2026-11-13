@@ -293,15 +293,21 @@ def gen_wetland_catchment_polygons(
     reviewing the wetland polygons shapefile in a GIS.
 
     Points need no attributes: each point's wetland identity is borrowed
-    from the nearest polygon in *wetlands_path* (wetlands produced by
-    :func:`gen_wetland_polygons` never overlap, so "nearest" is always an
-    unambiguous match).
+    from the nearest polygon in *wetlands_path*, as long as that polygon is
+    within *snap_dist* (wetlands produced by :func:`gen_wetland_polygons`
+    never overlap, so within that radius "nearest" is always an unambiguous
+    match). A point with no wetland polygon within *snap_dist* is assigned a
+    new negative ``id_field`` value instead (``-1``, ``-2``, ...) rather than
+    silently inheriting a distant wetland's identity — negative ids are
+    never produced by :func:`gen_wetland_polygons`, so they're unambiguous
+    when reviewing the output in a GIS.
 
     Steps:
       1. Read the points and wetland polygons, reprojecting both to the
          D8 raster's CRS.
       2. Assign each point the ``id_field`` value of its nearest wetland
-         polygon.
+         polygon, within *snap_dist*; points with no such polygon get a new
+         negative id.
       3. Snap each point onto the nearest high-flow-accumulation cell with
          WBT ``snap_pour_points`` (forgives imprecise manual placement).
       4. Delineate the full upstream contributing area for every snapped
@@ -331,16 +337,18 @@ def gen_wetland_catchment_polygons(
         Column in *wetlands_path* identifying each wetland. Carried through
         to the output catchment polygons.
     snap_dist
-        Maximum distance (map units) WBT ``snap_pour_points`` may move a
-        point to reach the nearest high-flow-accumulation cell. Defaults to
-        the module-level constant ``_SNAP_DIST_M``.
+        Maximum distance (map units) a point may be from the nearest wetland
+        polygon to borrow its ``id_field`` (see above), and the maximum
+        distance WBT ``snap_pour_points`` may move a point to reach the
+        nearest high-flow-accumulation cell. Defaults to the module-level
+        constant ``_SNAP_DIST_M``.
 
     Returns
     -------
     tuple[Path, gpd.GeoDataFrame]
         Path to the written catchment-polygons shapefile, and the
-        corresponding GeoDataFrame (``id_field``, ``catchment_m2``,
-        ``catchment_ac``, geometry). Points whose snapped location produces
+        corresponding GeoDataFrame (``id_field``, ``cat_ar_m2``,
+        ``cat_ar_ac``, geometry). Points whose snapped location produces
         no catchment (nodata or outside the raster extent) are logged and
         excluded, not fatal.
     """
@@ -376,14 +384,31 @@ def gen_wetland_catchment_polygons(
     if wetlands_gdf.empty:
         raise ValueError("wetlands_path contains no wetland polygons to match points against.")
 
-    # Borrow each point's wetland identity from the nearest wetland polygon.
-    # Wetlands produced by gen_wetland_polygons are spatially distinct
-    # (non-overlapping), so "nearest" is always an unambiguous match.
+    # Borrow each point's wetland identity from the nearest wetland polygon,
+    # but only within snap_dist. Wetlands produced by gen_wetland_polygons
+    # are spatially distinct (non-overlapping), so within that radius
+    # "nearest" is always an unambiguous match.
     points_gdf = gpd.sjoin_nearest(
-        points_gdf[["geometry"]], wetlands_gdf[[id_field, "geometry"]], how="left",
+        points_gdf[["geometry"]],
+        wetlands_gdf[[id_field, "geometry"]],
+        how="left",
+        max_distance=snap_dist,
     )
     points_gdf = points_gdf[~points_gdf.index.duplicated(keep="first")]
     points_gdf = points_gdf[["geometry", id_field]].reset_index(drop=True)
+
+    # Points with no wetland polygon within snap_dist get a new negative id
+    # instead of silently inheriting a distant wetland's identity.
+    unmatched = points_gdf[id_field].isna()
+    if unmatched.any():
+        new_ids = -np.arange(1, int(unmatched.sum()) + 1)
+        points_gdf.loc[unmatched, id_field] = new_ids
+        logger.warning(
+            "%d point(s) had no wetland polygon within %.1f m — assigned "
+            "new catchment id(s): %s.",
+            int(unmatched.sum()), snap_dist, sorted(new_ids.tolist()),
+        )
+    points_gdf[id_field] = points_gdf[id_field].astype(wetlands_gdf[id_field].dtype)
 
     raw_points_path = output_dir / "_wetland_catchment_pour_points.shp"
     points_gdf.to_file(raw_points_path)
@@ -458,8 +483,11 @@ def gen_wetland_catchment_polygons(
     gdf = gpd.GeoDataFrame({id_field: ids, "geometry": polygons}, crs=ws_crs)
     if not gdf.empty:
         gdf = gdf.dissolve(by=id_field, aggfunc="first").reset_index()
-        gdf["catchment_m2"] = gdf.geometry.area
-        gdf["catchment_ac"] = gdf["catchment_m2"] / 4046.8564224
+        # Field names kept <= 10 chars for ESRI Shapefile/ArcGIS compatibility
+        # ("catchment_m2"/"catchment_ac" both truncate to the indistinguishable
+        # "catchment_" in ArcGIS).
+        gdf["cat_ar_m2"] = gdf.geometry.area
+        gdf["cat_ar_ac"] = gdf["cat_ar_m2"] / 4046.8564224
 
     output_path = output_dir / "Wetland_Catchment_Polygons.shp"
     if not gdf.empty:

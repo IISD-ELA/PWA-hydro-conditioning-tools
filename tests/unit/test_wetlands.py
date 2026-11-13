@@ -421,9 +421,72 @@ def test_gen_wetland_catchment_polygons_assigns_id_from_nearest_wetland(tmp_path
     by_id = gdf.set_index("wetland_id")
     assert by_id.loc[1, "geometry"].contains(Point(15.0, 85.0))
     assert by_id.loc[2, "geometry"].contains(Point(75.0, 15.0))
-    assert by_id.loc[1, "catchment_m2"] == pytest.approx(900.0)
-    assert by_id.loc[2, "catchment_m2"] == pytest.approx(900.0)
-    assert by_id.loc[1, "catchment_ac"] == pytest.approx(900.0 / 4046.8564224)
+    assert by_id.loc[1, "cat_ar_m2"] == pytest.approx(900.0)
+    assert by_id.loc[2, "cat_ar_m2"] == pytest.approx(900.0)
+    assert by_id.loc[1, "cat_ar_ac"] == pytest.approx(900.0 / 4046.8564224)
+
+
+def test_gen_wetland_catchment_polygons_assigns_negative_id_when_no_wetland_within_snap_dist(
+    tmp_path: Path, caplog,
+) -> None:
+    """A point farther than snap_dist from every wetland polygon must not
+    silently inherit a distant wetland's id -- it gets a new, unique
+    negative id instead (never produced by gen_wetland_polygons, so it's
+    unambiguous downstream). A point still within range of a real wetland
+    in the same batch must keep its correct, positive id."""
+    pixel_size = 10.0
+    grid_shape = (10, 10)
+
+    d8_path = _write_depression_raster(tmp_path / "d8.tif", np.ones(grid_shape), pixel_size_m=pixel_size)
+    accum_path = _write_depression_raster(tmp_path / "accum.tif", np.ones(grid_shape), pixel_size_m=pixel_size)
+
+    wetlands_path = _write_wetlands_shapefile(
+        tmp_path / "wetlands.shp", [(5, box(0, 70, 30, 100))],
+    )
+    # Point A is inside the wetland; points B and C are both well beyond the
+    # default snap_dist (20 m) from any wetland polygon.
+    points_path = _write_points_shapefile(
+        tmp_path / "points.shp", [(15.0, 85.0), (75.0, 15.0), (45.0, 45.0)],
+    )
+
+    fake_wbt = _make_fake_wbt()
+
+    def _run_snap_pour_points(**kwargs):
+        gpd.read_file(kwargs["pour_pts"]).to_file(kwargs["output"])
+        return 0
+
+    def _run_watershed(**kwargs):
+        data = np.full(grid_shape, -1.0, dtype=np.float32)
+        data[0:3, 0:3] = 11.0   # point A's catchment
+        data[7:10, 6:9] = 22.0  # point B's catchment
+        data[4:7, 3:6] = 44.0   # point C's catchment
+        _write_depression_raster(Path(kwargs["output"]), data, pixel_size_m=pixel_size, nodata=-1.0)
+        return 0
+
+    fake_wbt.snap_pour_points.side_effect = _run_snap_pour_points
+    fake_wbt.watershed.side_effect = _run_watershed
+
+    with patch("pwa_tools.wetlands.wbt_session") as mock_session:
+        mock_session.return_value.__enter__ = lambda s: fake_wbt
+        mock_session.return_value.__exit__ = MagicMock(return_value=False)
+
+        with caplog.at_level("WARNING"):
+            _, gdf = gen_wetland_catchment_polygons(
+                points_path, wetlands_path, d8_path, accum_path, tmp_path / "out",
+            )
+
+    assert "no wetland polygon within" in caplog.text
+
+    matched_id = next(
+        wid for wid, geom in zip(gdf["wetland_id"], gdf["geometry"])
+        if geom.contains(Point(15.0, 85.0))
+    )
+    assert matched_id == 5
+
+    unmatched_ids = [wid for wid in gdf["wetland_id"] if wid != 5]
+    assert len(unmatched_ids) == 2
+    assert all(wid < 0 for wid in unmatched_ids)
+    assert len(set(unmatched_ids)) == 2  # distinct negative ids, not reused
 
 
 def test_gen_wetland_catchment_polygons_passes_raster_paths_and_snap_dist(tmp_path: Path) -> None:

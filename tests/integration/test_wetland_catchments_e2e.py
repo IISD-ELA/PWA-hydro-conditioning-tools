@@ -114,7 +114,7 @@ def test_gen_wetland_catchment_polygons_real_wbt(tmp_path: Path) -> None:
 
     pixel_area = _PIXEL_SIZE_M * _PIXEL_SIZE_M
     grid_area = _GRID_SHAPE[0] * _GRID_SHAPE[1] * pixel_area
-    catchment_m2 = gdf.iloc[0]["catchment_m2"]
+    catchment_m2 = gdf.iloc[0]["cat_ar_m2"]
     # More than a single pixel (real upstream delineation happened) but well
     # short of the whole grid (flow never converges east-west on this DEM).
     assert pixel_area < catchment_m2 < grid_area
