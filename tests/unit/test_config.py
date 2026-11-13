@@ -157,6 +157,13 @@ def test_inputs_culvert_filename_defaults_to_none() -> None:
     assert inputs.culvert_filename is None
 
 
+def test_inputs_wetland_points_filename_defaults_to_none() -> None:
+    inputs = PwaInputs(
+        clrh_filename="x", lidar_filenames=["y"], nhn_filename="z", crs_string="EPSG:1"
+    )
+    assert inputs.wetland_points_filename is None
+
+
 # ============ PwaConfig ============
 
 
@@ -198,6 +205,29 @@ def test_config_from_dict_treats_empty_culvert_as_none(tmp_path: Path) -> None:
     data["inputs"]["culvert_filename"] = ""
     config = PwaConfig.from_dict(data)
     assert config.inputs.culvert_filename is None
+
+
+def test_config_from_dict_treats_empty_wetland_points_as_none(tmp_path: Path) -> None:
+    data = _config_dict(tmp_path)
+    data["inputs"]["wetland_points_filename"] = ""
+    config = PwaConfig.from_dict(data)
+    assert config.inputs.wetland_points_filename is None
+
+
+def test_config_accepts_wetland_points_filename_with_wetland_catchments(tmp_path: Path) -> None:
+    data = _config_dict(tmp_path, wetland_catchments=True)
+    data["inputs"]["wetland_points_filename"] = "wetland_points"
+    config = PwaConfig.from_dict(data)
+    assert config.inputs.wetland_points_filename == "wetland_points"
+
+
+def test_config_rejects_wetland_points_filename_without_wetland_catchments(tmp_path: Path) -> None:
+    """Catchment delineation needs the D8/accumulation rasters wetland_catchments
+    produces, so a points file without that flag is a misconfiguration."""
+    data = _config_dict(tmp_path, wetland_catchments=False)
+    data["inputs"]["wetland_points_filename"] = "wetland_points"
+    with pytest.raises(ValueError, match="wetland_catchments"):
+        PwaConfig.from_dict(data)
 
 
 def test_config_rejects_empty_watershed_name(tmp_path: Path) -> None:
@@ -318,6 +348,14 @@ def test_expected_input_files_includes_culvert_when_set(tmp_path: Path) -> None:
     config = PwaConfig.from_dict(data)
     files = config.expected_input_files()
     assert config.paths.hydrocon_raw / "my_culverts.shp" in files
+
+
+def test_expected_input_files_includes_wetland_points_when_set(tmp_path: Path) -> None:
+    data = _config_dict(tmp_path, wetland_catchments=True)
+    data["inputs"]["wetland_points_filename"] = "wetland_points"
+    config = PwaConfig.from_dict(data)
+    files = config.expected_input_files()
+    assert config.paths.hydrocon_raw / "wetland_points.shp" in files
 
 
 def test_expected_input_files_lists_every_lidar_in_multi_raster_mode(tmp_path: Path) -> None:
@@ -570,6 +608,19 @@ def test_to_dict_with_culvert_round_trip(tmp_path: Path) -> None:
     rebuilt = PwaConfig.from_dict(original.to_dict())
     assert rebuilt == original
     assert rebuilt.inputs.culvert_filename == "my_culverts"
+
+
+def test_to_dict_with_wetland_points_round_trip(tmp_path: Path) -> None:
+    """Regression guard: wetland_catchments must also round-trip through
+    to_dict(), or re-loading a config with wetland_points_filename set would
+    fail __post_init__'s wetland_catchments dependency check."""
+    data = _config_dict(tmp_path, wetland_catchments=True)
+    data["inputs"]["wetland_points_filename"] = "wetland_points"
+    original = PwaConfig.from_dict(data)
+    rebuilt = PwaConfig.from_dict(original.to_dict())
+    assert rebuilt == original
+    assert rebuilt.inputs.wetland_points_filename == "wetland_points"
+    assert rebuilt.wetland_catchments is True
 
 
 def test_to_dict_with_multiple_lidar_round_trip(tmp_path: Path) -> None:

@@ -87,6 +87,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     print(f"Depression raster : {result.depression_raster}")
     if result.wetlands is not None:
         print(f"Wetland polygons  : {result.wetlands}")
+    if result.wetland_catchment_polygons is not None:
+        print(f"Wetland catchments: {result.wetland_catchment_polygons}")
     return 0
 
 
